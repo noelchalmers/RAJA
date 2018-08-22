@@ -28,6 +28,10 @@
 
 #include "RAJA/config.hpp"
 
+#ifdef RAJA_ENABLE_HIP
+#include <hip/hip_runtime.h>
+#endif
+
 #include <cstdlib>
 #include <stdexcept>
 
@@ -38,27 +42,34 @@
 //
 #if defined(RAJA_ENABLE_CUDA) && defined(__CUDA_ARCH__)
 #define RAJA_DEVICE_CODE
+#elif defined(RAJA_ENABLE_HIP) && defined(__HIP_DEVICE_COMPILE__)
+#define RAJA_DEVICE_CODE
 #endif
 
 #if defined(RAJA_ENABLE_CUDA) && defined(__CUDACC__)
-#define RAJA_HOST_DEVICE __host__ __device__
-#define RAJA_DEVICE __device__
+#	define RAJA_HOST_DEVICE __host__ __device__
+#	define RAJA_DEVICE __device__
 
-#if defined(RAJA_ENABLE_CLANG_CUDA)
-#define RAJA_SUPPRESS_HD_WARN
-#else
-#if defined(_WIN32)  // windows is non-compliant, yay
-#define RAJA_SUPPRESS_HD_WARN __pragma(nv_exec_check_disable)
-#else
-#define RAJA_SUPPRESS_HD_WARN _Pragma("nv_exec_check_disable")
-#endif
-#endif
+#	if defined(RAJA_ENABLE_CLANG_CUDA)
+#		define RAJA_SUPPRESS_HD_WARN
+#	else
+#		if defined(_WIN32)  // windows is non-compliant, yay
+#			define RAJA_SUPPRESS_HD_WARN __pragma(nv_exec_check_disable)
+#		else
+#			define RAJA_SUPPRESS_HD_WARN _Pragma("nv_exec_check_disable")
+#		endif
+#	endif
+
+#elif defined(RAJA_ENABLE_HIP) && defined(__HIPCC__)
+#	define RAJA_HOST_DEVICE __host__ __device__
+#	define RAJA_DEVICE __device__
+# define RAJA_SUPPRESS_HD_WARN
 
 #else
 
-#define RAJA_HOST_DEVICE
-#define RAJA_DEVICE
-#define RAJA_SUPPRESS_HD_WARN
+#	define RAJA_HOST_DEVICE
+#	define RAJA_DEVICE
+#	define RAJA_SUPPRESS_HD_WARN
 #endif
 
 /*!

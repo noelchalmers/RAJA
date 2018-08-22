@@ -1,6 +1,6 @@
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // Copyright (c) 2016-18, Lawrence Livermore National Security, LLC.
-// 
+//
 // Produced at the Lawrence Livermore National Laboratory
 //
 // LLNL-CODE-689114
@@ -108,7 +108,7 @@ CUDA_TYPED_TEST_P(Kernel, Basic)
 
   //Check reduction
   int stride1 = 5;
-  int arr_len = stride1*stride1; 
+  int arr_len = stride1*stride1;
 
   double *arr;
 #if defined(RAJA_ENABLE_CUDA)
@@ -120,7 +120,7 @@ CUDA_TYPED_TEST_P(Kernel, Basic)
   for(int i=0; i<arr_len; ++i){
     arr[i] = i;
   }
-  
+
   //set the min and max of the array
   arr[4] = -1;
   arr[8] = 50;
@@ -132,7 +132,7 @@ CUDA_TYPED_TEST_P(Kernel, Basic)
   RAJA::kernel<Pol>(ranges, [=] RAJA_HOST_DEVICE(Idx0 i, Idx1 j) {
       // std::cerr << "i: " << get_val(i) << " j: " << j << std::endl;
       tsum += get_val(i) * 1.1 + get_val(j);
-  });    
+  });
 
 
   RAJA::kernel<Pol>(ranges2, [=] RAJA_HOST_DEVICE(Idx0 i, Idx1 j) {
@@ -140,18 +140,18 @@ CUDA_TYPED_TEST_P(Kernel, Basic)
       RAJA::Index_type id = get_val(j) + get_val(i) * stride1;
       tMin.min(arr[id]);
       tMax.max(arr[id]);
-  });      
+  });
 
   tMin.reset(0.0);
   tMax.reset(0.0);
-  
+
   RAJA::kernel<Pol>(ranges2, [=] RAJA_HOST_DEVICE(Idx0 i, Idx1 j) {
       // std::cerr << "i: " << get_val(i) << " j: " << j << std::endl;
       RAJA::Index_type id = get_val(j) + get_val(i) * stride1;
       tMin.min(arr[id]);
-      
+
       tMax.max(arr[id]);
-  });      
+  });
 
   ASSERT_FLOAT_EQ(total, tsum.get());
   ASSERT_FLOAT_EQ(-1,  tMin.get());
@@ -170,7 +170,7 @@ CUDA_TYPED_TEST_P(Kernel, Basic)
   auto rangeList = RAJA::make_tuple(idx_list, idy_list);
 
   RAJA::kernel<Pol>(rangeList, [=] RAJA_HOST_DEVICE(Idx0 i, Idx1 j) {
-    // std::cerr << "i: " << get_val(i) << " j: " << j << std::endl;      
+    // std::cerr << "i: " << get_val(i) << " j: " << j << std::endl;
       v(get_val(i), j) = get_val(i) * x_len + j;
       tsum += get_val(i) * 1.1 + j;
   });
@@ -185,8 +185,8 @@ CUDA_TYPED_TEST_P(Kernel, Basic)
   ASSERT_FLOAT_EQ(total, tsum.get());
 
   total=0.0;
-  tsum.reset(0.0); 
-  double *idx_test; 
+  tsum.reset(0.0);
+  double *idx_test;
 #if defined(RAJA_ENABLE_CUDA)
     cudaMallocManaged(&idx_test,
                       sizeof(double) * x_len * y_len,
@@ -209,11 +209,11 @@ CUDA_TYPED_TEST_P(Kernel, Basic)
       total += i * 1.1 + j;
     }
   }
-  ASSERT_FLOAT_EQ(total, tsum.get());  
+  ASSERT_FLOAT_EQ(total, tsum.get());
 
 
   total=0.0;
-  tsum.reset(0.0); 
+  tsum.reset(0.0);
   auto iterSpace3 = RAJA::make_tuple(RAJA::TypedRangeSegment<Idx0>(0,x_len), idy_list,RAJA::TypedRangeSegment<Idx1>(0,10));
   RAJA::kernel<Pol>(iterSpace3, [=] RAJA_HOST_DEVICE (Idx0 i, Idx1 j, Idx1 k) {
       Index_type id = get_val(i)*x_len + get_val(j);
@@ -227,8 +227,8 @@ CUDA_TYPED_TEST_P(Kernel, Basic)
       total += i * 1.1 + j;
     }
   }
-  
-  ASSERT_FLOAT_EQ(total, tsum.get());  
+
+  ASSERT_FLOAT_EQ(total, tsum.get());
 
 #if defined(RAJA_ENABLE_CUDA)
   cudaFree(arr);
@@ -438,8 +438,8 @@ CUDA_TEST(Kernel, CudaCollapse2)
   cudaMallocManaged(&err, 2*sizeof(int));
 
   //Initialize data to zero
-  sum1[0] = 0; 
-  sum2[0] = 0; 
+  sum1[0] = 0;
+  sum2[0] = 0;
   err[0] = 0;
   err[1] = 0;
 
@@ -772,7 +772,7 @@ TEST(Kernel, FissionFusion_Conditional){
 
   // Loop Fusion if param == 0
 	// Loop Fission if param == 1
-	
+
   using Pol = KernelPolicy<
 	        If<Equals<Param<0>, Value<0>>,
             For<0, seq_exec, Lambda<0>, Lambda<1>>
@@ -808,7 +808,7 @@ TEST(Kernel, FissionFusion_Conditional){
 					x[i] += 2;
 				}
 		);
-  
+
 		for(int i = 0;i < N;++ i){
 			ASSERT_EQ(x[i], 3 + 3*param);
 		}
@@ -958,14 +958,14 @@ TEST(Kernel, Collapse3)
         [=] (Index_type k, Index_type j, Index_type i) {
           data[i + N*(j + M*k)] = i + N*(j+M*k);
         });
-  
+
 
   for(int k=0; k<K; k++){
     for(int j=0; j<M; ++j){
       for(int i=0; i<N; ++i){
-        
+
         int id = i + N*(j + M*k);
-        ASSERT_EQ(data[id], id);        
+        ASSERT_EQ(data[id], id);
       }
     }
   }
@@ -994,18 +994,18 @@ TEST(Kernel, Collapse4)
         RAJA::RangeSegment(0, K),
         RAJA::RangeSegment(0, M),
         RAJA::RangeSegment(0, N) ),
-        [=] (Index_type k, Index_type j, Index_type i) {          
-          Index_type  id = i + N * (j + M*k); 
-          data[id] = id; 
+        [=] (Index_type k, Index_type j, Index_type i) {
+          Index_type  id = i + N * (j + M*k);
+          data[id] = id;
 
-        }); 
+        });
 
   for(int k=0; k<K; k++){
     for(int j=0; j<M; ++j){
       for(int i=0; i<N; ++i){
-        
+
         int id = i + N*(j + M*k);
-        ASSERT_EQ(data[id], id);        
+        ASSERT_EQ(data[id], id);
       }
     }
   }
@@ -1045,7 +1045,7 @@ TEST(Kernel, Collapse5)
   for(int k=0; k<K; ++k){
     for(int j=0; j<M; ++j){
       for(int i=0; i<N; ++i){
-        
+
         int id = i + N*(j+M*k);
         ASSERT_EQ(data[id], id);
       }
@@ -1085,9 +1085,9 @@ TEST(Kernel, Collapse6)
         [=] (Index_type k, Index_type j, Index_type i) {
           data[i + N*j] += k;
         });
-  
+
   for(int j=0; j<M; ++j){
-    for(int i=0; i<N; ++i){ 
+    for(int i=0; i<N; ++i){
       ASSERT_EQ(data[i +N*j], 6);
     }
   }
@@ -1238,7 +1238,7 @@ CUDA_TEST(Kernel, CudaConditional){
   // Loop Fusion
   using Pol = KernelPolicy<
             CudaKernel<
-              For<0, cuda_threadblock_exec<32>, 
+              For<0, cuda_threadblock_exec<32>,
 							  If<Param<0>, Lambda<0>>,
 								Lambda<1>
 						  >
@@ -1259,7 +1259,7 @@ CUDA_TEST(Kernel, CudaConditional){
 				[=] RAJA_DEVICE (int i, bool){
 					trip_count += 2;
 				},
-				
+
 				// This always gets executed
 				[=] RAJA_DEVICE (int i, bool){
 					trip_count += 1;

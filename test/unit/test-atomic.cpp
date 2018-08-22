@@ -402,28 +402,28 @@ CUDA_TEST(Atomic, basic_CUDA_Logical)
 TEST(Atomic, basic_seq_AtomicFunction)
 {
   testAtomicFunctionPol<RAJA::seq_exec, RAJA::atomic::auto_atomic>();
-  testAtomicFunctionPol<RAJA::seq_exec, RAJA::atomic::seq_atomic>();
-  testAtomicFunctionPol<RAJA::seq_exec, RAJA::atomic::builtin_atomic>();
+  // testAtomicFunctionPol<RAJA::seq_exec, RAJA::atomic::seq_atomic>();
+  // testAtomicFunctionPol<RAJA::seq_exec, RAJA::atomic::builtin_atomic>();
 }
 
 TEST(Atomic, basic_seq_AtomicRef)
 {
   testAtomicRefPol<RAJA::seq_exec, RAJA::atomic::auto_atomic>();
-  testAtomicRefPol<RAJA::seq_exec, RAJA::atomic::seq_atomic>();
-  testAtomicRefPol<RAJA::seq_exec, RAJA::atomic::builtin_atomic>();
+  // testAtomicRefPol<RAJA::seq_exec, RAJA::atomic::seq_atomic>();
+  // testAtomicRefPol<RAJA::seq_exec, RAJA::atomic::builtin_atomic>();
 }
 
 TEST(Atomic, basic_seq_AtomicView)
 {
   testAtomicViewPol<RAJA::seq_exec, RAJA::atomic::auto_atomic>();
-  testAtomicViewPol<RAJA::seq_exec, RAJA::atomic::seq_atomic>();
-  testAtomicViewPol<RAJA::seq_exec, RAJA::atomic::builtin_atomic>();
+  // testAtomicViewPol<RAJA::seq_exec, RAJA::atomic::seq_atomic>();
+  // testAtomicViewPol<RAJA::seq_exec, RAJA::atomic::builtin_atomic>();
 }
 
 
 TEST(Atomic, basic_seq_Logical)
 {
   testAtomicLogicalPol<RAJA::seq_exec, RAJA::atomic::auto_atomic>();
-  testAtomicLogicalPol<RAJA::seq_exec, RAJA::atomic::seq_atomic>();
-  testAtomicLogicalPol<RAJA::seq_exec, RAJA::atomic::builtin_atomic>();
+  // testAtomicLogicalPol<RAJA::seq_exec, RAJA::atomic::seq_atomic>();
+  // testAtomicLogicalPol<RAJA::seq_exec, RAJA::atomic::builtin_atomic>();
 }
