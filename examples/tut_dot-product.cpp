@@ -24,9 +24,9 @@
 /*
  *  Vector Dot Product Example
  *
- *  Computes dot = (a,b), where a, b are vectors of 
+ *  Computes dot = (a,b), where a, b are vectors of
  *  doubles and dot is a scalar double. It illustrates how RAJA
- *  supports a portable parallel reduction opertion in a way that 
+ *  supports a portable parallel reduction opertion in a way that
  *  the code looks like it does in a sequential implementation.
  *
  *  RAJA features shown:
@@ -43,6 +43,8 @@
 */
 #if defined(RAJA_ENABLE_CUDA)
 const int CUDA_BLOCK_SIZE = 256;
+#elif defined(RAJA_ENABLE_HIP)
+const int HIP_BLOCK_SIZE = 256;
 #endif
 
 //
@@ -94,8 +96,8 @@ int main(int RAJA_UNUSED_ARG(argc), char **RAJA_UNUSED_ARG(argv[]))
 
   RAJA::ReduceSum<RAJA::seq_reduce, double> seqdot(0.0);
 
-  RAJA::forall<RAJA::seq_exec>(RAJA::RangeSegment(0, N), [=] (int i) { 
-    seqdot += a[i] * b[i]; 
+  RAJA::forall<RAJA::seq_exec>(RAJA::RangeSegment(0, N), [=] (int i) {
+    seqdot += a[i] * b[i];
   });
 
   dot = seqdot.get();
@@ -111,9 +113,9 @@ int main(int RAJA_UNUSED_ARG(argc), char **RAJA_UNUSED_ARG(argv[]))
 
   RAJA::ReduceSum<RAJA::omp_reduce, double> ompdot(0.0);
 
-  RAJA::forall<RAJA::omp_parallel_for_exec>(RAJA::RangeSegment(0, N), [=] (int i) { 
-    ompdot += a[i] * b[i]; 
-  });    
+  RAJA::forall<RAJA::omp_parallel_for_exec>(RAJA::RangeSegment(0, N), [=] (int i) {
+    ompdot += a[i] * b[i];
+  });
 
   dot = ompdot.get();
   std::cout << "\t (a, b) = " << dot << std::endl;
@@ -129,15 +131,42 @@ int main(int RAJA_UNUSED_ARG(argc), char **RAJA_UNUSED_ARG(argv[]))
 
   RAJA::ReduceSum<RAJA::cuda_reduce<CUDA_BLOCK_SIZE>, double> cudot(0.0);
 
-  RAJA::forall<RAJA::cuda_exec<CUDA_BLOCK_SIZE>>(RAJA::RangeSegment(0, N), 
-    [=] RAJA_DEVICE (int i) { 
-    cudot += a[i] * b[i]; 
-  });    
+  RAJA::forall<RAJA::cuda_exec<CUDA_BLOCK_SIZE>>(RAJA::RangeSegment(0, N),
+    [=] RAJA_DEVICE (int i) {
+    cudot += a[i] * b[i];
+  });
 
   dot = cudot.get();
   std::cout << "\t (a, b) = " << dot << std::endl;
 
   checkResult(dot, dot_ref);
+#endif
+
+//----------------------------------------------------------------------------//
+
+#if defined(RAJA_ENABLE_HIP)
+  std::cout << "\n Running RAJA HIP dot product...\n";
+
+  int *d_a = memoryManager::allocate_gpu<int>(N);
+  int *d_b = memoryManager::allocate_gpu<int>(N);
+
+  hipErrchk(hipMemcpy( d_a, a, N * sizeof(int), hipMemcpyHostToDevice ));
+  hipErrchk(hipMemcpy( d_b, b, N * sizeof(int), hipMemcpyHostToDevice ));
+
+  RAJA::ReduceSum<RAJA::hip_reduce<HIP_BLOCK_SIZE>, double> cudot(0.0);
+
+  RAJA::forall<RAJA::hip_exec<HIP_BLOCK_SIZE>>(RAJA::RangeSegment(0, N),
+    [=] RAJA_DEVICE (int i) {
+    cudot += d_a[i] * d_b[i];
+  });
+
+  dot = cudot.get();
+  std::cout << "\t (a, b) = " << dot << std::endl;
+
+  checkResult(dot, dot_ref);
+
+  memoryManager::deallocate_gpu(d_a);
+  memoryManager::deallocate_gpu(d_b);
 #endif
 
 //----------------------------------------------------------------------------//
