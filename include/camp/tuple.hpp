@@ -85,14 +85,13 @@ namespace internal
     CAMP_HOST_DEVICE constexpr tuple_storage() : val(){};
 
     CAMP_SUPPRESS_HD_WARN
-    template <typename T>
-    CAMP_HOST_DEVICE constexpr tuple_storage(T&& v)
+    CAMP_HOST_DEVICE constexpr tuple_storage(Type const &v) : val(v) {};
+    //CAMP_SUPPRESS_HD_WARN
+    //template <typename T>
+    //CAMP_HOST_DEVICE constexpr tuple_storage(T&& v) : val(std::forward<T>(v)){}
         // initializing with (...) instead of {...} for compiler compatability
         // some compilers complain when Type has no members and we use {...} to
         // initialize val
-        : val(std::forward<T>(v))
-    {
-    }
 
     CAMP_HOST_DEVICE constexpr const Type& get_inner() const noexcept
     {
@@ -117,6 +116,12 @@ namespace internal
     CAMP_HOST_DEVICE constexpr tuple_helper()
     {
     }
+
+    CAMP_HOST_DEVICE constexpr tuple_helper(Types const&... args)
+        : internal::tuple_storage<Indices, Types>(args)...
+    {
+    }
+
     CAMP_HOST_DEVICE constexpr tuple_helper(tuple_helper const& rhs)
         : tuple_storage<Indices, Types>(
               rhs.tuple_storage<Indices, Types>::get_inner())...
@@ -197,12 +202,12 @@ private:
 public:
   // NOTE: __host__ __device__ on constructors causes warnings, and nothing else
   // Constructors
-  template <bool B = concepts::metalib::all_of<
-                std::is_default_constructible<Elements>::value...>::value,
-            typename std::enable_if<B, void>::type* = nullptr>
-  CAMP_HOST_DEVICE constexpr tuple() : base()
-  {
-  }
+
+  
+  //template <bool B = concepts::metalib::all_of<
+  //              std::is_default_constructible<Elements>::value...>::value,
+  //          typename std::enable_if<B, void>::type* = nullptr>
+  CAMP_HOST_DEVICE constexpr tuple() : base(){}
 
   CAMP_HOST_DEVICE constexpr tuple(tuple const& o) : base(o.base) {}
 
@@ -219,13 +224,18 @@ public:
     return *this;
   }
 
-  template <typename... Args,
-            typename std::enable_if<
-                !is_pack_this_tuple<Args...>::value>::type* = nullptr>
-  CAMP_HOST_DEVICE constexpr explicit tuple(Args&&... rest)
-      : base{std::forward<Args>(rest)...}
+  CAMP_HOST_DEVICE constexpr explicit tuple(Elements const&... rest)
+      : base{rest...}
   {
   }
+
+  //template <typename... Args,
+  //          typename std::enable_if<
+  //              !is_pack_this_tuple<Args...>::value>::type* = nullptr>
+  //CAMP_HOST_DEVICE constexpr explicit tuple(Args&&... rest)
+  //    : base{std::forward<Args>(rest)...}
+  //{
+  //}
 
   template <typename... RTypes>
   CAMP_HOST_DEVICE CAMP_CONSTEXPR14 Self& operator=(const tuple<RTypes...>& rhs)
