@@ -133,9 +133,9 @@ int main(int RAJA_UNUSED_ARG(argc), char **RAJA_UNUSED_ARG(argv[]))
     //
     // Gauss-Seidel Iteration
     //
-    RAJA::forall<colorPolicy>(colorSet, 
+    RAJA::forall<colorPolicy>(colorSet,
       [=](RAJA::Index_type id) {
-        
+
       //
       // Compute x,y grid index
       //
@@ -145,7 +145,7 @@ int main(int RAJA_UNUSED_ARG(argc), char **RAJA_UNUSED_ARG(argv[]))
       double x = gridx.o + m * gridx.h;
       double y = gridx.o + n * gridx.h;
 
-      double f = gridx.h * gridx.h * 
+      double f = gridx.h * gridx.h *
                  (2 * x * (y - 1) * (y - 2 * x + x * y + 2) * exp(x - y));
 
       double newI = -0.25 * (f - I[id - N - 2] - I[id + N + 2] -
@@ -196,9 +196,9 @@ RAJA::TypedIndexSet<RAJA::ListSegment> gsColorPolicy(int N)
   bool isRed = true;
 
   for (int n = 1; n <= N; ++n) {
-    
+
     for (int m = 1; m <= N; ++m) {
-      
+
       RAJA::Index_type id = n * (N + 2) + m;
       if (isRed) {
         Red[ib] = id;
@@ -245,7 +245,7 @@ void computeErr(double *I, grid_s grid)
 
   RAJA::kernel<errPolicy>(RAJA::make_tuple(fdBounds,fdBounds),
                        [=] (RAJA::Index_type tx, RAJA::Index_type ty) {
-    
+
       int id = tx + grid.n * ty;
       double x = grid.o + tx * grid.h;
       double y = grid.o + ty * grid.h;

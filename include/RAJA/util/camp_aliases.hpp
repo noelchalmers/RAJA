@@ -31,9 +31,9 @@
 #ifndef RAJA_CAMP_ALIASES_HPP
 #define RAJA_CAMP_ALIASES_HPP
 
-#include "camp/defines.hpp"
-#include "camp/list/list.hpp"
-#include "camp/tuple.hpp"
+#include "camp/camp.hpp"
+//#include "camp/list/list.hpp"
+//#include "camp/tuple.hpp"
 
 namespace RAJA
 {

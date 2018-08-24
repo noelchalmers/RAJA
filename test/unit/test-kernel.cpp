@@ -69,6 +69,34 @@ protected:
 };
 TYPED_TEST_CASE_P(Kernel);
 
+#if defined(RAJA_ENABLE_HIP)
+template <typename NestedPolicy>
+class Kernel_gpu : public ::testing::Test
+{
+protected:
+  Index_type* data;
+  Index_type* d_data;
+  view_2d view{nullptr, x_len, y_len};
+  view_2d d_view{nullptr, x_len, y_len};
+
+  virtual void SetUp()
+  {
+    hipMalloc(&d_data,sizeof(Index_type) * x_len * y_len);
+    d_view.set_data(d_data);
+
+    data = new Index_type[x_len * y_len];
+    view.set_data(data);
+  }
+
+  virtual void TearDown()
+  {
+    hipFree(d_data);
+    delete[] data;
+  }
+};
+TYPED_TEST_CASE_P(Kernel_gpu);
+#endif
+
 
 RAJA_HOST_DEVICE constexpr Index_type get_val(Index_type v) noexcept
 {
@@ -242,6 +270,164 @@ CUDA_TYPED_TEST_P(Kernel, Basic)
 
 REGISTER_TYPED_TEST_CASE_P(Kernel, Basic);
 
+#ifdef RAJA_ENABLE_HIP
+HIP_TYPED_TEST_P(Kernel_gpu, Basic)
+{
+  using Pol = at_v<TypeParam, 0>;
+  using IndexTypes = at_v<TypeParam, 1>;
+  using Idx0 = at_v<IndexTypes, 0>;
+  using Idx1 = at_v<IndexTypes, 1>;
+  RAJA::ReduceSum<at_v<TypeParam, 2>, RAJA::Real_type> tsum(0.0);
+  RAJA::ReduceMin<at_v<TypeParam, 2>, RAJA::Real_type> tMin(0.0);
+  RAJA::ReduceMax<at_v<TypeParam, 2>, RAJA::Real_type> tMax(0.0);
+  RAJA::Real_type total{0.0};
+  auto ranges = RAJA::make_tuple(RAJA::TypedRangeSegment<Idx0>(0, x_len),
+                                 RAJA::TypedRangeSegment<Idx1>(0, y_len));
+  auto v = this->d_view;
+  RAJA::kernel<Pol>(ranges, [=] RAJA_HOST_DEVICE(Idx0 i, Idx1 j) {
+    // std::cerr << "i: " << get_val(i) << " j: " << j << std::endl;
+    v(get_val(i), j) = get_val(i) * x_len + j;
+    tsum += get_val(i) * 1.1 + j;
+  });
+
+
+  hipMemcpy(this->data, this->d_data, x_len*y_len*sizeof(double), hipMemcpyDeviceToHost);
+  for (Index_type i = 0; i < x_len; ++i) {
+    for (Index_type j = 0; j < y_len; ++j) {
+      // std::cout << "i: " << get_val(i) << " j: " << j << "  " << this->view(i, j) << "  " << i * x_len + j <<  std::endl;
+      ASSERT_EQ(this->view(i, j), i * x_len + j);
+      total += i * 1.1 + j;
+    }
+  }
+  ASSERT_FLOAT_EQ(total, tsum.get());
+
+  //Check reduction
+  int stride1 = 5;
+  int arr_len = stride1*stride1;
+
+  double *arr = new double[arr_len];
+  double *d_arr;
+  hipMalloc(&d_arr, arr_len*sizeof(double));
+
+  for(int i=0; i<arr_len; ++i){
+    arr[i] = i;
+  }
+
+  //set the min and max of the array
+  arr[4] = -1;
+  arr[8] = 50;
+
+  hipMemcpy(d_arr, arr, arr_len*sizeof(double), hipMemcpyHostToDevice);
+
+  tsum.reset(0.0);
+  auto ranges2 = RAJA::make_tuple(RAJA::TypedRangeSegment<Idx0>(0, stride1),
+                                  RAJA::TypedRangeSegment<Idx1>(0, stride1));
+
+  RAJA::kernel<Pol>(ranges, [=] RAJA_HOST_DEVICE(Idx0 i, Idx1 j) {
+      // std::cerr << "i: " << get_val(i) << " j: " << j << std::endl;
+      tsum += get_val(i) * 1.1 + get_val(j);
+  });
+
+  RAJA::kernel<Pol>(ranges2, [=] RAJA_HOST_DEVICE(Idx0 i, Idx1 j) {
+      // std::cerr << "i: " << get_val(i) << " j: " << j << std::endl;
+      RAJA::Index_type id = get_val(j) + get_val(i) * stride1;
+      tMin.min(d_arr[id]);
+      tMax.max(d_arr[id]);
+  });
+
+  tMin.reset(0.0);
+  tMax.reset(0.0);
+
+  RAJA::kernel<Pol>(ranges2, [=] RAJA_HOST_DEVICE(Idx0 i, Idx1 j) {
+      // std::cerr << "i: " << get_val(i) << " j: " << j << std::endl;
+      RAJA::Index_type id = get_val(j) + get_val(i) * stride1;
+      tMin.min(d_arr[id]);
+
+      tMax.max(d_arr[id]);
+  });
+
+  ASSERT_FLOAT_EQ(total, tsum.get());
+  ASSERT_FLOAT_EQ(-1,  tMin.get());
+  ASSERT_FLOAT_EQ(50, tMax.get());
+
+  std::vector<Idx0> idx_x;
+  std::vector<Idx1> idx_y;
+
+  for(int i=0; i<x_len; ++i) idx_x.push_back(static_cast<Idx0>(i));
+  for(int i=0; i<y_len; ++i) idx_y.push_back(static_cast<Idx1>(i));
+
+  tsum.reset(0.0);
+  total = 0.0;
+  RAJA::TypedListSegment<Idx0> idx_list(&idx_x[0], idx_x.size());
+  RAJA::TypedListSegment<Idx1> idy_list(&idx_y[0], idx_y.size());
+
+  auto rangeList = RAJA::make_tuple(idx_list, idy_list);
+
+  RAJA::kernel<Pol>(rangeList, [=] RAJA_HOST_DEVICE(Idx0 i, Idx1 j) {
+    // std::cerr << "i: " << get_val(i) << " j: " << j << std::endl;
+      v(get_val(i), j) = get_val(i) * x_len + j;
+      tsum += get_val(i) * 1.1 + j;
+  });
+  hipMemcpy(this->data, this->d_data, x_len*y_len*sizeof(double), hipMemcpyDeviceToHost);
+
+  for (Index_type i = 0; i < x_len; ++i) {
+    for (Index_type j = 0; j < y_len; ++j) {
+      ASSERT_EQ(this->view(i, j), i * x_len + j);
+      total += i * 1.1 + j;
+    }
+  }
+  ASSERT_FLOAT_EQ(total, tsum.get());
+
+  total=0.0;
+  tsum.reset(0.0);
+  double *idx_test = new double[x_len*y_len];
+  double *d_idx_test;
+  hipMalloc(&d_idx_test, sizeof(double) * x_len * y_len);
+
+  auto iterSpace2 = RAJA::make_tuple(RAJA::TypedRangeSegment<Idx0>(0,x_len), idy_list);
+  RAJA::kernel<Pol>(iterSpace2, [=] RAJA_HOST_DEVICE (Idx0 i, Idx1 j) {
+      Index_type id = get_val(i)*x_len + get_val(j);
+      d_idx_test[id] = get_val(i) * x_len + get_val(j);
+      tsum += get_val(i) * 1.1 + get_val(j);
+  });
+  hipMemcpy(idx_test, d_idx_test, x_len*y_len*sizeof(double), hipMemcpyDeviceToHost);
+
+  for (Index_type i = 0; i < x_len; ++i) {
+    for (Index_type j = 0; j < y_len; ++j) {
+      ASSERT_EQ(idx_test[i*x_len+j], i * x_len + j);
+      total += i * 1.1 + j;
+    }
+  }
+  ASSERT_FLOAT_EQ(total, tsum.get());
+
+
+  total=0.0;
+  tsum.reset(0.0);
+  auto iterSpace3 = RAJA::make_tuple(RAJA::TypedRangeSegment<Idx0>(0,x_len), idy_list,RAJA::TypedRangeSegment<Idx1>(0,10));
+  RAJA::kernel<Pol>(iterSpace3, [=] RAJA_HOST_DEVICE (Idx0 i, Idx1 j, Idx1 k) {
+      Index_type id = get_val(i)*x_len + get_val(j);
+      d_idx_test[id] = get_val(i) * x_len + get_val(j) + get_val(k) - get_val(k);
+    tsum += get_val(i) * 1.1 + get_val(j);
+  });
+  hipMemcpy(idx_test, d_idx_test, x_len*y_len*sizeof(double), hipMemcpyDeviceToHost);
+
+  for (Index_type i = 0; i < x_len; ++i) {
+    for (Index_type j = 0; j < y_len; ++j) {
+      ASSERT_EQ(idx_test[i*x_len+j], i * x_len + j);
+      total += i * 1.1 + j;
+    }
+  }
+
+  ASSERT_FLOAT_EQ(total, tsum.get());
+
+  hipFree(d_arr);
+  hipFree(d_idx_test);
+  delete[] arr;
+  delete[] idx_test;
+}
+REGISTER_TYPED_TEST_CASE_P(Kernel_gpu, Basic);
+#endif
+
 using RAJA::list;
 using s = RAJA::seq_exec;
 using TestTypes =
@@ -292,6 +478,13 @@ using CUDATypes = ::testing::Types<
          list<TypedIndex, Index_type>,
          RAJA::cuda_reduce<1024>>>;
 INSTANTIATE_TYPED_TEST_CASE_P(CUDA, Kernel, CUDATypes);
+#endif
+#if defined(RAJA_ENABLE_HIP)
+using HIPTypes = ::testing::Types<
+    list<KernelPolicy<For<1, s, HipKernel<For<0, RAJA::hip_threadblock_exec<128>, Lambda<0>>>>>,
+         list<TypedIndex, Index_type>,
+         RAJA::hip_reduce<1024>>>;
+INSTANTIATE_TYPED_TEST_CASE_P(HIP, Kernel_gpu, HIPTypes);
 #endif
 
 
@@ -655,6 +848,400 @@ CUDA_TEST(Kernel, SubRange_Complex)
 
 
 #endif
+
+//----------------------------------------------------------------------------------------
+
+#if defined(RAJA_ENABLE_HIP)
+
+HIP_TEST(Kernel_gpu, HipZeroIter)
+{
+  using Pol = KernelPolicy<
+      HipKernel<
+        statement::Collapse<RAJA::hip_thread_exec, ArgList<0,1,2>, Lambda<0>>>>;
+
+  int *x = new int[3*2*5];
+  int *d_x = nullptr;
+  hipMalloc(&d_x, 3*2*5*sizeof(int));
+
+  for(int i = 0;i < 3*2*5;++ i){
+    x[i] = 123;
+  }
+
+  hipMemcpy(d_x, x, 3*2*5*sizeof(int), hipMemcpyHostToDevice);
+
+  RAJA::kernel<Pol>(
+      RAJA::make_tuple(RAJA::RangeSegment(0, 3),
+                       RAJA::RangeSegment(2, 2),  // should do 0 iterations
+                       RAJA::RangeSegment(0, 5)),
+      [=] __device__ (Index_type i, Index_type j, Index_type k) {
+        d_x[i + j*3 + k*3*2] = 321;
+       });
+  hipMemcpy(x, d_x, 3*2*5*sizeof(int), hipMemcpyDeviceToHost);
+
+  hipDeviceSynchronize();
+
+  for(int i = 0;i < 3*2*5;++ i){
+    ASSERT_EQ(x[i], 123);
+  }
+
+  hipFree(d_x);
+  delete[] x;
+}
+
+HIP_TEST(Kernel_gpu, HipCollapse1a)
+{
+  using Pol = KernelPolicy<
+      HipKernel<
+        //Collapse<RAJA::hip_threadblock_exec<128>, ArgList<0,1,2>, Lambda<0>>>>;
+        statement::Collapse<RAJA::hip_thread_exec, ArgList<0,1,2>, Lambda<0>>>>;
+
+  int *x = new int[3*2*5];
+  int *d_x = nullptr;
+  hipMalloc(&d_x, 3*2*5*sizeof(int));
+
+  RAJA::kernel<Pol>(
+      RAJA::make_tuple(RAJA::RangeSegment(0, 3),
+                       RAJA::RangeSegment(0, 2),
+                       RAJA::RangeSegment(0, 5)),
+      [=] __device__ (Index_type i, Index_type j, Index_type k) {
+        d_x[i + j*3 + k*3*2] = 1;
+       });
+  hipMemcpy(x, d_x, 3*2*5*sizeof(int), hipMemcpyDeviceToHost);
+
+  hipDeviceSynchronize();
+
+  for(int i = 0;i < 3*2*5;++ i){
+    ASSERT_EQ(x[i], 1);
+  }
+
+  hipFree(d_x);
+  delete[] x;
+}
+
+
+HIP_TEST(Kernel_gpu, HipCollapse1b)
+{
+  using Pol = RAJA::KernelPolicy<
+      HipKernel<
+        Collapse<RAJA::hip_threadblock_exec<5>, ArgList<0,1>,
+          For<2, RAJA::seq_exec, Lambda<0>>
+        >
+      >>;
+
+  int *x = new int[3*2*5];
+  int *d_x = nullptr;
+  hipMalloc(&d_x, 3*2*5*sizeof(int));
+
+  RAJA::kernel<Pol>(
+      RAJA::make_tuple(RAJA::RangeSegment(0, 3),
+                       RAJA::RangeSegment(0, 2),
+                       RAJA::RangeSegment(0, 5)),
+      [=] RAJA_DEVICE (Index_type i, Index_type j, Index_type k) {
+        d_x[i + j*3 + k*3*2] = 1;
+       });
+  hipMemcpy(x, d_x, 3*2*5*sizeof(int), hipMemcpyDeviceToHost);
+
+  hipDeviceSynchronize();
+
+  for(int i = 0;i < 3*2*5;++ i){
+    ASSERT_EQ(x[i], 1);
+  }
+
+  hipFree(d_x);
+  delete[] x;
+}
+
+
+//HIP_TEST(Kernel, HipCollapse1c)
+//{
+//
+//  using Pol = RAJA::KernelPolicy<
+//      HipKernel<
+//        Collapse<RAJA::hip_block_seq_exec, ArgList<0,1>,
+//          For<2, RAJA::hip_thread_exec, Lambda<0>>
+//        >
+//      >>;
+//
+//  int *x = nullptr;
+//  hipMalloc(&x, 3*2*5*sizeof(int));
+//
+//  RAJA::kernel<Pol>(
+//      RAJA::make_tuple(RAJA::RangeSegment(0, 3),
+//                       RAJA::RangeSegment(0, 2),
+//                       RAJA::RangeSegment(0, 5)),
+//      [=] RAJA_DEVICE (Index_type i, Index_type j, Index_type k) {
+//        x[i + j*3 + k*3*2] = 1;
+//       });
+//
+//  hipDeviceSynchronize();
+//
+//  for(int i = 0;i < 3*2*5;++ i){
+//    ASSERT_EQ(x[i], 1);
+//  }
+//
+//  hipFree(x);
+//}
+
+
+
+
+HIP_TEST(Kernel, HipCollapse2)
+{
+  using Pol = RAJA::KernelPolicy<
+       HipKernel<
+         Collapse<RAJA::hip_threadblock_exec<7>, ArgList<0,1>, Lambda<0>>
+       >>;
+
+
+  Index_type sum1;
+  Index_type *d_sum1;
+  hipMalloc(&d_sum1, 1*sizeof(Index_type));
+
+  Index_type sum2;
+  Index_type *d_sum2;
+  hipMalloc(&d_sum2, 1*sizeof(Index_type));
+
+  int *err = new int[2];
+  int *d_err;
+  hipMalloc(&d_err, 2*sizeof(int));
+
+  //Initialize data to zero
+  sum1 = 0;
+  sum2 = 0;
+  err[0] = 0;
+  err[1] = 0;
+
+  hipMemcpy(d_sum1, &sum1, 1*sizeof(Index_type), hipMemcpyHostToDevice);
+  hipMemcpy(d_sum2, &sum2, 1*sizeof(Index_type), hipMemcpyHostToDevice);
+  hipMemcpy(d_err, err, 2*sizeof(Index_type), hipMemcpyHostToDevice);
+
+  int N = 41;
+  RAJA::kernel<Pol>(
+                       RAJA::make_tuple(RAJA::RangeSegment(1, N),
+                                        RAJA::RangeSegment(1, N)),
+                       [=] RAJA_DEVICE (Index_type i, Index_type j) {
+
+                         RAJA::atomic::atomicAdd<RAJA::atomic::hip_atomic>(d_sum1,i);
+                         RAJA::atomic::atomicAdd<RAJA::atomic::hip_atomic>(d_sum2,j);
+
+                         if(i >= 41){
+                           RAJA::atomic::atomicAdd<RAJA::atomic::hip_atomic>(d_err,1);
+                         }
+                         if(j >= 41){
+                           RAJA::atomic::atomicAdd<RAJA::atomic::hip_atomic>(d_err+1,1);
+                         }
+
+                       });
+
+  hipDeviceSynchronize();
+
+  hipMemcpy(&sum1, d_sum1, 1*sizeof(Index_type), hipMemcpyDeviceToHost);
+  hipMemcpy(&sum2, d_sum2, 1*sizeof(Index_type), hipMemcpyDeviceToHost);
+  hipMemcpy(  err,  d_err, 2*sizeof(Index_type), hipMemcpyDeviceToHost);
+
+  ASSERT_EQ( 0, err[0]);
+  ASSERT_EQ( 0, err[1]);
+  ASSERT_EQ( (N*(N-1)*(N-1))/2, sum1);
+  ASSERT_EQ( (N*(N-1)*(N-1))/2, sum2);
+
+
+  hipFree(d_sum1);
+  hipFree(d_sum2);
+  hipFree(d_err);
+
+}
+
+HIP_TEST(Kernel, HipReduceA)
+{
+
+  using Pol = RAJA::KernelPolicy<
+      HipKernel<
+        Collapse<RAJA::hip_threadblock_exec<7>, ArgList<0,1>,
+          For<2, RAJA::seq_exec, Lambda<0>>
+        >
+      >>;
+
+  RAJA::ReduceSum<RAJA::hip_reduce<1024>, int> reducer(0);
+
+  RAJA::kernel<Pol>(
+      RAJA::make_tuple(RAJA::RangeSegment(0, 3),
+                       RAJA::RangeSegment(0, 2),
+                       RAJA::RangeSegment(0, 5)),
+      [=] RAJA_DEVICE (Index_type i, Index_type j, Index_type k) {
+        reducer += 1;
+       });
+
+
+  ASSERT_EQ((int)reducer, 3*2*5);
+}
+
+
+
+
+
+HIP_TEST(Kernel, HipReduceB)
+{
+
+  using Pol = RAJA::KernelPolicy<
+        For<2, RAJA::seq_exec,
+          HipKernel<
+            Collapse<RAJA::hip_threadblock_exec<7>, ArgList<0,1>, Lambda<0>>
+          >
+        >>;
+
+  RAJA::ReduceSum<RAJA::hip_reduce<1024>, int> reducer(0);
+
+  RAJA::kernel<Pol>(
+      RAJA::make_tuple(RAJA::RangeSegment(0, 3),
+                       RAJA::RangeSegment(0, 2),
+                       RAJA::RangeSegment(0, 5)),
+      [=] RAJA_DEVICE (Index_type i, Index_type j, Index_type k) {
+        reducer += 1;
+       });
+
+
+  ASSERT_EQ((int)reducer, 3*2*5);
+}
+
+
+
+
+HIP_TEST(Kernel, HipReduceC)
+{
+
+  using Pol = RAJA::KernelPolicy<
+        For<2, RAJA::loop_exec,
+          For<0, RAJA::loop_exec,
+            HipKernel<
+              For<1, RAJA::hip_threadblock_exec<45>, Lambda<0>>
+            >
+          >
+        >>;
+
+  RAJA::ReduceSum<RAJA::hip_reduce<1024>, int> reducer(0);
+
+  RAJA::kernel<Pol>(
+      RAJA::make_tuple(RAJA::RangeSegment(0, 3),
+                       RAJA::RangeSegment(0, 2),
+                       RAJA::RangeSegment(0, 5)),
+      [=] RAJA_DEVICE (Index_type i, Index_type j, Index_type k) {
+        reducer += 1;
+       });
+
+
+  ASSERT_EQ((int)reducer, 3*2*5);
+}
+
+
+
+
+HIP_TEST(Kernel, SubRange_ThreadBlock)
+{
+  using Pol = RAJA::KernelPolicy<
+        HipKernel<
+          For<0, RAJA::hip_threadblock_exec<57>, Lambda<0>>
+        >>;
+
+  size_t num_elem = 2048;
+  size_t first = 10;
+  size_t last = num_elem - 10;
+
+  double *ptr = (double*) malloc(sizeof(double) * num_elem);
+  double *d_ptr = nullptr;
+  hipErrchk(hipMalloc(&d_ptr, sizeof(double) * num_elem) );
+
+  RAJA::kernel<Pol>(
+      RAJA::make_tuple(RAJA::RangeSegment(0, num_elem)),
+      [=] RAJA_HOST_DEVICE (Index_type i) {
+        d_ptr[i] = 0.0;
+       });
+
+  RAJA::kernel<Pol>(
+      RAJA::make_tuple(RAJA::RangeSegment(first, last)),
+      [=] RAJA_HOST_DEVICE (Index_type i) {
+        d_ptr[i] = 1.0;
+       });
+  hipDeviceSynchronize();
+
+  hipMemcpy(ptr, d_ptr, sizeof(double) * num_elem, hipMemcpyDeviceToHost);
+
+  size_t count = 0;
+  for(size_t i = 0;i < num_elem; ++ i){
+    count += ptr[i];
+  }
+  ASSERT_EQ(count, num_elem-20);
+  for(size_t i = 0;i < 10;++ i){
+    ASSERT_EQ(ptr[i], 0.0);
+    ASSERT_EQ(ptr[num_elem-1-i], 0.0);
+  }
+
+  free(ptr);
+  hipFree(d_ptr);
+}
+
+
+
+
+
+/* Causes a hipcc linking error. Unknown reason */
+// HIP_TEST(Kernel, SubRange_Complex)
+// {
+//   using PolA = RAJA::KernelPolicy<
+//           HipKernel<
+//             For<0, RAJA::hip_threadblock_exec<128>, Lambda<0>>
+//           >>;
+
+//   using PolB = RAJA::KernelPolicy<
+//           HipKernel<
+//             Collapse<RAJA::hip_threadblock_exec<128>, ArgList<0, 1>,
+//               For<2, RAJA::seq_exec, Lambda<0>>
+//             >
+//           >>;
+
+
+//   size_t num_elem = 1024;
+//   size_t first = 10;
+//   size_t last = num_elem - 10;
+
+//   double *ptr = (double*) malloc(sizeof(double) * num_elem);
+//   double *d_ptr = nullptr;
+//   hipErrchk(hipMalloc(&d_ptr, sizeof(double) * num_elem) );
+
+//   RAJA::kernel<PolA>(
+//       RAJA::make_tuple(RAJA::RangeSegment(0, num_elem)),
+//       [=] RAJA_HOST_DEVICE (Index_type i) {
+//         d_ptr[i] = 0.0;
+//        });
+
+//   RAJA::kernel<PolB>(
+//       RAJA::make_tuple(RAJA::RangeSegment(first, last),
+//                        RAJA::RangeSegment(0, 16),
+//                        RAJA::RangeSegment(0, 32)),
+//       [=] RAJA_HOST_DEVICE (Index_type i, Index_type j, Index_type k) {
+//         RAJA::atomic::atomicAdd<RAJA::atomic::hip_atomic>(d_ptr+i, 1.0);
+//        });
+
+
+//   hipDeviceSynchronize();
+
+//   hipMemcpy(ptr, d_ptr, sizeof(double) * num_elem, hipMemcpyDeviceToHost);
+
+//   size_t count = 0;
+//   for(size_t i = 0;i < num_elem; ++ i){
+//     count += ptr[i];
+//   }
+//   ASSERT_EQ(count, (num_elem-20)*16*32);
+//   for(size_t i = 0;i < 10;++ i){
+//     ASSERT_EQ(ptr[i], 0.0);
+//     ASSERT_EQ(ptr[num_elem-1-i], 0.0);
+//   }
+//   free(ptr);
+//   hipFree(d_ptr);
+// }
+
+#endif
+
+//----------------------------------------------------------------------------------------
 
 
 
@@ -2031,6 +2618,859 @@ CUDA_TEST(Kernel, CudaExec_tile1threadexec){
 #endif // CUDA
 
 
+//-----------------------------------------------------------------------------------
+
+#if defined(RAJA_ENABLE_HIP)
+
+
+HIP_TEST(Kernel, HipExec){
+  using namespace RAJA;
+
+
+  constexpr long N = 1024;
+
+  // Loop Fusion
+  using Pol = KernelPolicy<
+            HipKernel<
+              For<0, hip_threadblock_exec<32>, Lambda<0>>
+            >
+        >;
+
+//  double *d_ptr;
+//  hipErrchk(hipMalloc(&d_ptr, sizeof(double) * N));
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+  kernel<Pol>(
+
+      RAJA::make_tuple(RangeSegment(0,N)),
+
+      [=] __device__ (RAJA::Index_type i){
+
+        trip_count += 1;
+        //d_ptr[i] = 1;
+        //d_ptr2[i] = 2;
+      }
+  );
+  hipDeviceSynchronize();
+
+  long result = (long)trip_count;
+
+  ASSERT_EQ(result, N);
+}
+
+HIP_TEST(Kernel, HipConditional){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)1024;
+
+  // Loop Fusion
+  using Pol = KernelPolicy<
+            HipKernel<
+              For<0, hip_threadblock_exec<32>,
+                If<Param<0>, Lambda<0>>,
+                Lambda<1>
+              >
+            >
+        >;
+
+  for(int param = 0;param < 2;++ param){
+
+    RAJA::ReduceSum<hip_reduce<128>, long> trip_count(0);
+
+    kernel_param<Pol>(
+
+        RAJA::make_tuple(TypedRangeSegment<int>(0,N)),
+
+        RAJA::make_tuple((bool)param),
+
+        // This only gets executed if param==1
+        [=] RAJA_DEVICE (int i, bool){
+          trip_count += 2;
+        },
+
+        // This always gets executed
+        [=] RAJA_DEVICE (int i, bool){
+          trip_count += 1;
+        }
+    );
+    hipDeviceSynchronize();
+
+    long result = (long)trip_count;
+
+    ASSERT_EQ(result, N*(2*param+1));
+  }
+}
+
+
+
+HIP_TEST(Kernel, HipExec1){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)3*1024*1024;
+
+  // Loop Fusion
+  using Pol = KernelPolicy<
+            HipKernel<
+              For<0, hip_threadblock_exec<32>, Lambda<0>>
+            >
+        >;
+
+
+  RAJA::ReduceSum<hip_reduce<128>, long> trip_count(0);
+
+  kernel<Pol>(
+
+      RAJA::make_tuple(RangeSegment(0,N)),
+
+      [=] __device__ (ptrdiff_t i){
+
+        trip_count += 1;
+      }
+  );
+  hipDeviceSynchronize();
+
+  long result = (long)trip_count;
+
+  ASSERT_EQ(result, N);
+}
+
+
+HIP_TEST(Kernel, HipExec1a){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)128;
+
+  // Loop Fusion
+  using Pol = KernelPolicy<
+            HipKernel<
+              statement::Collapse<hip_thread_exec, ArgList<0,1,2>, Lambda<0>>
+            >
+        >;
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+  kernel<Pol>(
+
+      RAJA::make_tuple(RangeSegment(0,N), RangeSegment(0,N), RangeStrideSegment(0,N,2)),
+
+      [=] __device__ (ptrdiff_t i, ptrdiff_t j, ptrdiff_t k){
+        trip_count += 1;
+      }
+  );
+  hipDeviceSynchronize();
+
+  long result = (long)trip_count;
+
+  ASSERT_EQ(result, N*N*N/2);
+}
+
+
+
+HIP_TEST(Kernel, HipExec1ab){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)128;
+
+  // Loop Fusion
+  using Pol = KernelPolicy<
+            HipKernel<
+              statement::Collapse<hip_block_exec, ArgList<0,1,2>, Lambda<0>>
+            >
+        >;
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+  kernel<Pol>(
+
+      RAJA::make_tuple(RangeSegment(0,N), RangeSegment(0,N), RangeStrideSegment(0,N,2)),
+
+      [=] __device__ (ptrdiff_t i, ptrdiff_t j, ptrdiff_t k){
+        trip_count += 1;
+      }
+  );
+  hipDeviceSynchronize();
+
+  long result = (long)trip_count;
+
+  ASSERT_EQ(result, N*N*N/2);
+}
+
+
+
+HIP_TEST(Kernel, HipExec1ac){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)128;
+
+  // Loop Fusion
+  using Pol = KernelPolicy<
+            HipKernel<
+              statement::Collapse<hip_threadblock_exec<1024>, ArgList<0,1,2>, Lambda<0>>
+            >
+        >;
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+  kernel<Pol>(
+
+      RAJA::make_tuple(RangeSegment(0,N), RangeSegment(0,N), RangeStrideSegment(0,N,2)),
+
+      [=] __device__ (ptrdiff_t i, ptrdiff_t j, ptrdiff_t k){
+        trip_count += 1;
+      }
+  );
+  hipDeviceSynchronize();
+
+  long result = (long)trip_count;
+
+  ASSERT_EQ(result, N*N*N/2);
+}
+
+
+HIP_TEST(Kernel, HipExec1b){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)3*1024*1024;
+
+  // Loop Fusion
+  using Pol = KernelPolicy<
+            HipKernel<
+              For<0, hip_threadblock_exec<128>, Lambda<0>>
+              >
+        >;
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+  kernel<Pol>(
+
+      RAJA::make_tuple(RangeSegment(0,N)),
+
+      [=] __device__ (ptrdiff_t i){
+
+        trip_count += 1;
+      }
+  );
+  hipDeviceSynchronize();
+
+  long result = (long)trip_count;
+
+  ASSERT_EQ(result, N);
+}
+
+
+
+
+HIP_TEST(Kernel, HipExec1c){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)3;
+
+  // Loop Fusion
+  using Pol = KernelPolicy<
+      HipKernelExt<hip_explicit_launch<false, 5, 3>,
+            //HipKernel<
+              For<0, hip_block_exec,
+                For<1, hip_block_exec,
+                  For<2, hip_threadblock_exec<2>, Lambda<0>>
+                >
+              >
+            >
+        >;
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+  kernel<Pol>(
+
+      RAJA::make_tuple(RangeSegment(0,N), RangeSegment(0,N), RangeSegment(0,N)),
+
+      [=] __device__ (RAJA::Index_type i, RAJA::Index_type j, RAJA::Index_type k){
+
+        trip_count += 1;
+      }
+  );
+  hipDeviceSynchronize();
+
+  long result = (long)trip_count;
+
+  ASSERT_EQ(result, N*N*N);
+}
+
+
+
+
+
+
+
+
+HIP_TEST(Kernel, HipComplexNested){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)739;
+
+  using Pol = KernelPolicy<
+            HipKernel<
+              For<0, hip_threadblock_exec<15>,
+                For<1, hip_thread_exec,
+                  For<2, hip_thread_exec, Lambda<0>>
+                >,
+                For<2, hip_thread_exec, Lambda<0>>
+              >
+            >
+          >;
+
+  int *ptr = (int*) malloc(sizeof(int) * N);
+  int *d_ptr = nullptr;
+  hipErrchk(hipMalloc(&d_ptr, sizeof(int) * N) );
+
+  for(long i = 0;i < N;++ i){
+    ptr[i] = 0;
+  }
+  hipMemcpy(d_ptr, ptr, sizeof(int) * N, hipMemcpyHostToDevice);
+
+  auto segments = RAJA::make_tuple(RangeSegment(0,N), RangeSegment(0,N), RangeSegment(0, N));
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+  kernel<Pol>(
+
+      segments,
+
+      [=] __device__ (RAJA::Index_type i, RAJA::Index_type j, RAJA::Index_type k){
+
+        trip_count += 1;
+        RAJA::atomic::atomicAdd<RAJA::atomic::auto_atomic>(d_ptr+i, (int)1);
+
+      }
+  );
+  hipDeviceSynchronize();
+  hipMemcpy(ptr, d_ptr, sizeof(int) * N, hipMemcpyDeviceToHost);
+
+
+  for(long i = 0;i < N;++ i){
+    ASSERT_EQ(ptr[i], (int)(N*N + N));
+  }
+
+  // check trip count
+  long result = (long)trip_count;
+  ASSERT_EQ(result, N*N*N + N*N);
+
+
+  free(ptr);
+  hipFree(d_ptr);
+}
+
+
+
+
+HIP_TEST(Kernel, HipShmemWindow1d){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)256;
+
+  using Pol = KernelPolicy<
+            HipKernel<
+              statement::Tile<0, statement::tile_fixed<16>, seq_exec,
+                SetShmemWindow<
+                  For<0, hip_thread_exec, Lambda<0>>,
+                  HipSyncThreads,
+                  For<0, hip_thread_exec, Lambda<1>>
+                >
+              >
+            >
+          >;
+
+  int *ptr = (int*) malloc(sizeof(int) * N);
+  int *d_ptr = nullptr;
+  hipErrchk(hipMalloc(&d_ptr, sizeof(int) * N) );
+
+  for(long i = 0;i < N;++ i){
+    ptr[i] = 0;
+  }
+  hipMemcpy(d_ptr, ptr, sizeof(int) * N, hipMemcpyHostToDevice);
+
+  auto segments = RAJA::make_tuple(RangeSegment(0,N));
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+  using shmem_t = ShmemTile<hip_shmem, double, ArgList<0>, SizeList<16>, decltype(segments)>;
+  shmem_t shmem;
+
+  kernel_param<Pol>(
+
+      segments,
+
+      RAJA::make_tuple(shmem),
+
+      [=] __device__ (RAJA::Index_type i, shmem_t &sh){
+
+        trip_count += 1;
+        sh(i) = i;
+
+      },
+
+      [=] __device__ (RAJA::Index_type i, shmem_t &sh){
+
+        trip_count += 1;
+        d_ptr[i] = sh(i);
+
+      }
+  );
+  hipDeviceSynchronize();
+  hipMemcpy(ptr, d_ptr, sizeof(int) * N, hipMemcpyDeviceToHost);
+
+  for(long i = 0;i < N;++ i){
+    ASSERT_EQ(ptr[i], (int)(i));
+  }
+
+  // check trip count
+  long result = (long)trip_count;
+  ASSERT_EQ(result, 2*N);
+
+
+  free(ptr);
+  hipFree(d_ptr);
+}
+
+
+HIP_TEST(Kernel, HipShmemWindow1dReverse){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)256;
+
+  using Pol = KernelPolicy<
+            HipKernel<
+              statement::Tile<0, statement::tile_fixed<16>, seq_exec,
+                SetShmemWindow<
+                  For<0, hip_thread_exec, Lambda<0>>,
+                  HipSyncThreads,
+                  For<0, hip_thread_exec, Lambda<1>>
+                >
+              >
+            >
+          >;
+
+  int *ptr = (int*) malloc(sizeof(int) * N);
+  int *d_ptr = nullptr;
+  hipErrchk(hipMalloc(&d_ptr, sizeof(int) * N) );
+
+  for(long i = 0;i < N;++ i){
+    ptr[i] = 0;
+  }
+  hipMemcpy(d_ptr, ptr, sizeof(int) * N, hipMemcpyHostToDevice);
+
+  auto segments = RAJA::make_tuple(RangeStrideSegment(N-1,-1,-1));
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+  using shmem_t = ShmemTile<hip_shmem, double, ArgList<0>, SizeList<16>, decltype(segments)>;
+  shmem_t shmem;
+
+  kernel_param<Pol>(
+
+      segments,
+
+      RAJA::make_tuple(shmem),
+
+      [=] __device__ (RAJA::Index_type i, shmem_t &sh){
+        trip_count += 1;
+        sh(i) = i;
+
+      },
+
+      [=] __device__ (RAJA::Index_type i, shmem_t &sh){
+
+        trip_count += 1;
+        d_ptr[i] = sh(i);
+
+      }
+  );
+  hipDeviceSynchronize();
+  hipMemcpy(ptr, d_ptr, sizeof(int) * N, hipMemcpyDeviceToHost);
+
+  for(long i = 0;i < N;++ i){
+    ASSERT_EQ(ptr[i], (int)(i));
+  }
+
+  // check trip count
+  long result = (long)trip_count;
+  ASSERT_EQ(result, 2*N);
+
+
+  free(ptr);
+  hipFree(d_ptr);
+}
+
+
+HIP_TEST(Kernel, HipShmemWindow2d){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)32;
+  constexpr long M = (long)64*1024;
+  // constexpr long M = (long)64*1024+1;
+
+  constexpr long tile_N = (long)32;
+  constexpr long tile_M = (long)32;
+
+  using Pol = KernelPolicy<
+            HipKernel<
+              statement::Tile<1, statement::tile_fixed<tile_N>, seq_exec,
+              //    For<1, hip_block_exec,
+                  For<1, hip_threadblock_exec<tile_M>,
+                    SetShmemWindow<
+
+                      For<0, seq_exec, Lambda<0>>,
+
+                      HipSyncThreads,
+
+                      For<0, seq_exec, Lambda<1>>
+                    >
+                  >
+              >
+            >
+          >;
+
+  int *ptr = (int*) malloc(sizeof(int) * N * M );
+  int *d_ptr = nullptr;
+  hipErrchk(hipMalloc(&d_ptr, sizeof(int) * N * M) );
+
+  for(long i = 0;i < N*M;++ i){
+    ptr[i] = 0;
+  }
+  hipMemcpy(d_ptr, ptr, sizeof(int) * N * M, hipMemcpyHostToDevice);
+
+  auto segments = RAJA::make_tuple(RangeSegment(0,N), RangeSegment(0,M));
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+
+  using shmem_t  = ShmemTile<hip_shmem, double, ArgList<0,1>, SizeList<tile_N, tile_M>, decltype(segments)>;
+  using shmem2_t = ShmemTile<hip_shmem, double, ArgList<0,1>, SizeList<tile_N, tile_M>, decltype(segments)>;
+
+
+  kernel_param<Pol>(
+
+      segments,
+
+      RAJA::make_tuple(shmem_t(), shmem2_t()),
+
+      [=] __device__ (RAJA::Index_type i, RAJA::Index_type j, shmem_t &shmem, shmem2_t &shmem2){
+        trip_count += 1;
+        shmem(i,j) = i*j;
+        shmem2(i,j) = 2*i*j;
+      },
+
+      [=] __device__ (RAJA::Index_type i, RAJA::Index_type j, shmem_t &shmem, shmem2_t &shmem2){
+
+        trip_count += 1;
+        d_ptr[i*M + j] = shmem(i,j) + shmem2(i,j);
+
+      }
+  );
+  hipDeviceSynchronize();
+  hipMemcpy(ptr, d_ptr, sizeof(int) * N * M, hipMemcpyDeviceToHost);
+
+  long errors=0;
+  for(long i = 0;i < N;++ i){
+    for(long j = 0;j < M;++ j){
+      if(ptr[i*M+j] != 3*i*j){
+        printf("i = %ld, j= %ld\n", i, j);
+      errors++;
+      }
+      ASSERT_EQ(ptr[i*M+j], (int)(3*i*j));
+      // ASSERT_EQ(ptr[i*M+j], (int)(i*j));
+    }
+  }
+
+  // check trip count
+  long result = (long)trip_count;
+  ASSERT_EQ(result, 2*N*M);
+
+
+  free(ptr);
+  hipFree(d_ptr);
+}
+
+
+
+HIP_TEST(Kernel, HipExec_1threadexec){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)256;
+
+  // Loop Fusion
+  using Pol = KernelPolicy<
+            HipKernel<
+              For<0, hip_block_exec,
+                For<1, hip_threadblock_exec<32>,
+                  For<2, hip_thread_exec,
+                    For<3, hip_thread_exec,Lambda<0>>
+                  >
+                >
+              >
+            >
+        >;
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+  kernel<Pol>(
+
+      RAJA::make_tuple(RangeSegment(0,N), RangeSegment(0,N), RangeSegment(0,N), RangeSegment(0,N)),
+
+      [=] __device__ (Index_type i, Index_type j, Index_type k, Index_type l){
+
+          trip_count += 1;
+
+      }
+  );
+  hipDeviceSynchronize();
+
+
+  long result = (long)trip_count;
+
+  ASSERT_EQ(result, N*N*N*N);
+}
+
+HIP_TEST(Kernel, HipExec_1blockexec){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)64; //*1024;
+
+  // Loop Fusion
+  using Pol = KernelPolicy<
+            HipKernel<
+              For<0, hip_block_exec, Lambda<0>>
+            >
+        >;
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+  kernel<Pol>(
+
+      RAJA::make_tuple(RangeSegment(0,N)),
+
+      [=] __device__ (int i){
+
+          trip_count += 1;
+
+      }
+  );
+  hipDeviceSynchronize();
+
+
+  long result = (long)trip_count;
+
+  ASSERT_EQ(result, N);
+}
+
+
+HIP_TEST(Kernel, HipExec_1threadblockexec){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)1024*1024;
+
+  // Loop Fusion
+  using Pol = KernelPolicy<
+            HipKernel<
+              For<0, hip_threadblock_exec<73>, Lambda<0>>
+            >
+        >;
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+  kernel<Pol>(
+
+      RAJA::make_tuple(RangeSegment(0,N)),
+
+      [=] __device__ (ptrdiff_t i){
+
+          trip_count += 1;
+
+      }
+  );
+  hipDeviceSynchronize();
+
+
+  long result = (long)trip_count;
+
+  ASSERT_EQ(result, N);
+}
+
+HIP_TEST(Kernel, HipExec_2threadexec){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)1024;
+
+  // Loop Fusion
+  using Pol = KernelPolicy<
+            HipKernel<
+              For<0, hip_thread_exec,
+                For<1, hip_thread_exec, Lambda<0>>
+              >
+            >
+        >;
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+  kernel<Pol>(
+
+      RAJA::make_tuple(RangeSegment(0,N), RangeSegment(0,N)),
+
+      [=] __device__ (ptrdiff_t i, ptrdiff_t j){
+          trip_count += 1;
+      }
+  );
+  hipDeviceSynchronize();
+
+  long result = (long)trip_count;
+
+  ASSERT_EQ(result, N*N);
+}
+
+HIP_TEST(Kernel, HipExec_1thread1blockexec){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)1024;
+
+  // Loop Fusion
+  using Pol = KernelPolicy<
+            HipKernel<
+              For<0, hip_block_exec,
+                For<1, hip_thread_exec, Lambda<0>>
+              >
+            >
+        >;
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+  kernel<Pol>(
+
+      RAJA::make_tuple(RangeSegment(0,N), RangeSegment(0,N)),
+
+      [=] __device__ (ptrdiff_t i, ptrdiff_t j){
+
+        if(i==j){
+          trip_count += 1;
+        }
+      }
+  );
+  hipDeviceSynchronize();
+
+  long result = (long)trip_count;
+
+  ASSERT_EQ(result, N);
+}
+
+
+HIP_TEST(Kernel, HipExec_3threadexec){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)256;
+
+  // Loop Fusion
+  using Pol = KernelPolicy<
+            HipKernel<
+              For<0, hip_thread_exec,
+                For<1, hip_thread_exec,
+                  For<2, hip_thread_exec, Lambda<0>>
+                >
+              >
+            >
+        >;
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+  kernel<Pol>(
+
+      RAJA::make_tuple(RangeSegment(0,N), RangeSegment(0,N), RangeSegment(0,N)),
+
+      [=] __device__ (ptrdiff_t i, ptrdiff_t j, ptrdiff_t k){
+
+          trip_count += 1;
+
+      }
+  );
+  hipDeviceSynchronize();
+
+  long result = (long)trip_count;
+
+  ASSERT_EQ(result, N*N*N);
+}
+
+
+HIP_TEST(Kernel, HipExec_tile1threadexec){
+  using namespace RAJA;
+
+
+  constexpr long N = (long)1024*1024;
+
+  // Loop Fusion
+  using Pol = KernelPolicy<
+            HipKernel<
+              statement::Tile<0, statement::tile_fixed<128>, seq_exec,
+                For<0, hip_thread_exec, Lambda<0>>
+              >
+            >
+        >;
+
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+
+  kernel<Pol>(
+
+      RAJA::make_tuple(RangeSegment(0,N)),
+
+      [=] __device__ (ptrdiff_t i){
+
+          trip_count += 1;
+
+      }
+  );
+  hipDeviceSynchronize();
+
+
+  long result = (long)trip_count;
+
+  ASSERT_EQ(result, N);
+}
+
+#endif // HIP
+
+//-----------------------------------------------------------------------------------
+
 
 TEST(Kernel, Hyperplane_seq){
 
@@ -2397,3 +3837,342 @@ TEST(Kernel, IndexCalc_thread){
 #endif
 
 
+#if defined(RAJA_ENABLE_HIP)
+
+
+HIP_TEST(Kernel, Hyperplane_hip_2d)
+{
+  using namespace RAJA;
+
+  using Pol = RAJA::KernelPolicy<
+            HipKernel<
+              Hyperplane<0, hip_seq_syncthreads_exec, ArgList<1>, hip_thread_exec,
+                Lambda<0>
+              >
+            >
+          >;
+
+  constexpr long N = (long)24;
+  constexpr long M = (long)11;
+
+  int *x = (int*) malloc(N*M*sizeof(int));
+  int *d_x = nullptr;
+  hipMalloc(&d_x, N*M*sizeof(int));
+
+
+  using myview = View<int, Layout<2, RAJA::Index_type>>;
+  myview xv{x, N, M};
+  myview d_xv{d_x, N, M};
+
+
+  RAJA::kernel<Pol>(
+      RAJA::make_tuple(RAJA::RangeSegment(0, N),
+                       RAJA::RangeSegment(0, M)),
+      [=] __device__ (Index_type i, Index_type j) {
+        int left = 1;
+        if(i > 0){
+          left = d_xv(i-1,j);
+        }
+
+        int up = 1;
+        if(j > 0){
+          up = d_xv(i,j-1);
+        }
+
+        d_xv(i,j) = left + up;
+
+       });
+
+  hipDeviceSynchronize();
+  hipMemcpy(x, d_x, N*M*sizeof(int), hipMemcpyDeviceToHost);
+
+  for(int i = 1;i < N;++ i){
+    for(int j = 1;j < M;++ j){
+      ASSERT_EQ(xv(i,j), xv(i-1,j)+xv(i,j-1));
+    }
+  }
+
+  free(x);
+  hipFree(d_x);
+}
+
+
+
+HIP_TEST(Kernel, Hyperplane_hip_2d_negstride)
+{
+  using namespace RAJA;
+
+  using Pol = RAJA::KernelPolicy<
+            HipKernel<
+              Hyperplane<0, hip_seq_syncthreads_exec, ArgList<1>, hip_thread_exec,
+                Lambda<0>
+              >
+            >
+          >;
+
+  constexpr long N = (long)24;
+  constexpr long M = (long)11;
+
+  int *x = (int*) malloc(N*M*sizeof(int));
+  int *d_x = nullptr;
+  hipMalloc(&d_x, N*M*sizeof(int));
+
+
+  using myview = View<int, Layout<2, RAJA::Index_type>>;
+  myview xv{x, N, M};
+  myview d_xv{d_x, N, M};
+
+  RAJA::kernel<Pol>(
+      RAJA::make_tuple(RAJA::RangeStrideSegment(N-1, -1, -1),
+                       RAJA::RangeStrideSegment(M-1, -1, -1)),
+      [=] __device__ (Index_type i, Index_type j) {
+
+        int right = 1;
+        if(i < N-1){
+          right = d_xv(i+1,j);
+        }
+
+        int down = 1;
+        if(j < M-1){
+          down = d_xv(i,j+1);
+        }
+
+        d_xv(i,j) = right + down;
+
+       });
+
+  hipDeviceSynchronize();
+  hipMemcpy(x, d_x, N*M*sizeof(int), hipMemcpyDeviceToHost);
+
+  for(int i = 0;i < N-1;++ i){
+    for(int j = 0;j < M-1;++ j){
+      ASSERT_EQ(xv(i,j), xv(i+1,j)+xv(i,j+1));
+    }
+  }
+
+  free(x);
+  hipFree(d_x);
+}
+
+
+HIP_TEST(Kernel, Hyperplane_hip_3d_tiled)
+{
+  using namespace RAJA;
+
+  using Pol = RAJA::KernelPolicy<
+            HipKernel<
+              For<0, hip_block_exec,
+                 RAJA::statement::Tile<2, RAJA::statement::tile_fixed<13>, seq_exec,
+                  RAJA::statement::Tile<3, RAJA::statement::tile_fixed<7>, seq_exec,
+                    Hyperplane<1, hip_seq_syncthreads_exec, ArgList<2,3>, hip_thread_exec,
+                      Lambda<0>
+                    >
+                  >
+                >
+              >
+            >
+          >;
+
+  constexpr long L = (long)1;
+  constexpr long N = (long)11;
+  constexpr long M = (long)27;
+  constexpr long O = (long)13;
+
+  long *x = (long*) malloc(N*M*O*sizeof(long));
+  long *d_x = nullptr;
+  hipMalloc(&d_x, N*M*O*sizeof(long));
+
+  using myview = TypedView<long, Layout<3, RAJA::Index_type>, ZoneI, ZoneJ, ZoneK>;
+  myview xv{x, N, M, O};
+  myview d_xv{d_x, N, M, O};
+
+  for(long i = 0;i < N*M*O;++ i){
+    x[i] = i;
+  }
+
+  RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
+  RAJA::ReduceSum<hip_reduce<1024>, long> oob_count(0);
+
+  RAJA::kernel<Pol>(
+      RAJA::make_tuple(RAJA::RangeSegment(0, L),
+                       RAJA::TypedRangeStrideSegment<ZoneI>(0, N, 1),
+                       RAJA::TypedRangeStrideSegment<ZoneJ>(M-1, -1, -1),
+                       RAJA::TypedRangeStrideSegment<ZoneK>(0, O, 1)),
+      [=] __device__ (int g, ZoneI i, ZoneJ j, ZoneK k) {
+
+
+
+        if(i < 0 || i >= N || j < 0 || j >= M || k < 0 || k >= O){
+          oob_count += 1;
+
+        }
+
+        long left = 1;
+        if(i > 0){
+          left = d_xv(i-1,j,k);
+        }
+
+        long up = 1;
+        if(j > 0){
+          up = d_xv(i,j-1,k);
+        }
+
+        long back = 1;
+        if(k > 0){
+          back = d_xv(i,j,k-1);
+        }
+
+        d_xv(i,j,k) = left + up + back;
+
+        trip_count += 1;
+
+       });
+
+  hipDeviceSynchronize();
+  hipMemcpy(x, d_x, N*M*O*sizeof(long), hipMemcpyDeviceToHost);
+
+  ASSERT_EQ((long)trip_count, (long)L*N*M*O);
+  ASSERT_EQ((long)oob_count, (long)0);
+
+
+  long y[N][M][O];
+  long *y_ptr = &y[0][0][0];
+
+  for(long i = 0;i < N*M*O;++ i){
+    y_ptr[i] = i;
+  }
+
+  for(int l = 0;l < L;++ l){
+    for(int i = 0;i < N;++ i){
+      for(int j = M-1;j >= 0;-- j){
+        for(int k = 0;k < O;++ k){
+          long left = 1;
+          if(i > 0){
+            left = y[i-1][j][k];
+          }
+
+          long up = 1;
+          if(j > 0){
+            up = y[i][j-1][k];
+          }
+
+          long back = 1;
+          if(k > 0){
+            back = y[i][j][k-1];
+          }
+
+          y[i][j][k] = left + up + back;
+        }
+      }
+    }
+  }
+
+
+  for(ZoneI i(0);i < N;++ i){
+    for(ZoneJ j(0);j < M;++ j){
+      for(ZoneK k(0);k < O;++ k){
+        ASSERT_EQ(xv(i,j,k), y[*i][*j][*k]);
+      }
+    }
+  }
+
+  free(x);
+  hipFree(d_x);
+}
+
+
+TEST(Kernel, IndexCalc_seq){
+
+
+  constexpr long N = (long)16;
+
+  auto segments = RAJA::make_tuple(RAJA::RangeSegment(0, N));
+  using segment_t = decltype(segments);
+
+  using loop_data_t = RAJA::internal::LoopData<RAJA::list<>, segment_t, RAJA::tuple<>>;
+
+  loop_data_t data(segments, RAJA::tuple<>{});
+
+  RAJA::internal::HipIndexCalc_Policy<0, RAJA::seq_exec> ic;
+
+  for(int init = 1;init < 5;++ init){
+
+    for(int inc = 1;inc < 7;++ inc){
+
+      int i = 0;
+
+      ic.initThread(data, init, inc);
+      ASSERT_EQ(ic.reset(data), init <= 0);
+      ASSERT_EQ(RAJA::get<0>(data.offset_tuple), i);
+
+      for(int iter = 0;iter < N;++ iter){
+
+        bool carry = false;
+        i += 1;
+        if(i >= N){
+          i = i%N;
+          carry = true;
+        }
+
+        ASSERT_EQ(ic.increment(data, inc) > 0, carry);
+        ASSERT_EQ(RAJA::get<0>(data.offset_tuple), i);
+
+      }
+
+
+    }
+  }
+
+}
+
+TEST(Kernel, IndexCalc_thread){
+
+
+  constexpr long N = (long)13;
+
+  auto segments = RAJA::make_tuple(RAJA::RangeSegment(0, N));
+  using segment_t = decltype(segments);
+
+  using loop_data_t = RAJA::internal::LoopData<RAJA::list<>, segment_t, RAJA::tuple<>>;
+
+  loop_data_t data(segments, RAJA::tuple<>{});
+
+  RAJA::internal::HipIndexCalc_Policy<0, RAJA::hip_thread_exec> ic;
+
+
+
+  for(int init = 1;init < 5;++ init){
+
+
+
+    for(int inc = 1;inc < 3*N;++ inc){
+
+      int i = init;
+
+      ic.initThread(data, init, inc);
+      ASSERT_EQ(ic.reset(data), false);
+      ASSERT_EQ(RAJA::get<0>(data.offset_tuple), i);
+
+
+      for(int iter = 0;iter < N;++ iter){
+
+
+        bool carry = false;
+        i += inc;
+        if(i >= N){
+          i = i%N;
+          carry = true;
+        }
+
+        ASSERT_EQ(ic.increment(data, inc) > 0, carry);
+        ASSERT_EQ(RAJA::get<0>(data.offset_tuple), i);
+
+      }
+
+    }
+  }
+
+}
+
+
+#endif

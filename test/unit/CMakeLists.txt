@@ -14,9 +14,9 @@
 #
 ###############################################################################
 
-# raja_add_test(
-#   NAME camp_tuple
-#   SOURCES camp_tuple.cpp)
+raja_add_test(
+  NAME camp_tuple
+  SOURCES camp_tuple.cpp)
 
 raja_add_test(
   NAME test-atomic
@@ -58,9 +58,9 @@ raja_add_test(
   NAME test-span
   SOURCES test-span.cpp)
 
-# raja_add_test(
-#   NAME test-kernel
-#   SOURCES test-kernel.cpp)
+raja_add_test(
+  NAME test-kernel
+  SOURCES test-kernel.cpp)
 
 raja_add_test(
   NAME test-multipolicy

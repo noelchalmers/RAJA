@@ -21,7 +21,7 @@
 #include "RAJA/RAJA.hpp"
 
 /*
- *   Time-Domain Finite Difference 
+ *   Time-Domain Finite Difference
  *   Acoustic Wave Equation Solver
  *
  * ------[Details]----------------------
@@ -34,7 +34,7 @@
  * The scheme uses a second order central difference discretization
  * for time and a fourth order central difference discretization for space.
  * Periodic boundary conditions are assumed on the grid [-1,1] x [-1, 1].
- * 
+ *
  * NOTE: The x and y dimensions are discretized identically.
  * ----[RAJA Concepts]-------------------
  * - RAJA kernels are portable and a single implemenation can run
@@ -83,7 +83,7 @@ int main(int RAJA_UNUSED_ARG(argc), char **RAJA_UNUSED_ARG(argv[]))
 {
 
   std::cout<<"Time-Domain Finite Difference Acoustic Wave Equation Solver"<<std::endl;
-         
+
   //
   // Wave speed squared
   //
@@ -223,14 +223,14 @@ void setIC(double *P1, double *P2, double t0, double t1, grid_s grid)
   using initialPolicy = RAJA::KernelPolicy<
   RAJA::statement::For<1, RAJA::loop_exec >,
     RAJA::statement::For<0, RAJA::loop_exec, RAJA::statement::Lambda<0>> >;
-  
+
   RAJA::kernel<initialPolicy>(RAJA::make_tuple(fdBounds,fdBounds),
                        [=] (RAJA::Index_type tx, RAJA::Index_type ty) {
-                         
+
       int id = tx + ty * grid.nx;
       double x = grid.ox + tx * grid.dx;
       double y = grid.ox + ty * grid.dx;
-      
+
       P1[id] = waveSol(t0, x, y);
       P2[id] = waveSol(t1, x, y);
     });
@@ -244,7 +244,7 @@ void wave(T *P1, T *P2, RAJA::RangeSegment fdBounds, double ct, int nx)
 
   RAJA::kernel<fdNestedPolicy>(RAJA::make_tuple(fdBounds,fdBounds),
                        [=] RAJA_HOST_DEVICE (RAJA::Index_type tx, RAJA::Index_type ty) {
-      //                  
+      //
       //Coefficients for fourth order stencil
       //
      double coeff[5] = { -1.0/12.0, 4.0/3.0, -5.0/2.0, 4.0/3.0, -1.0/12.0};
@@ -262,7 +262,7 @@ void wave(T *P1, T *P2, RAJA::RangeSegment fdBounds, double ct, int nx)
        const int xi = (tx + r + nx) % nx;
        const int idx = xi + nx * ty;
        lap += coeff[r + sr] * P2[idx];
-  
+
        const int yi = (ty + r + nx) % nx;
        const int idy = tx + nx * yi;
        lap += coeff[r + sr] * P2[idy];

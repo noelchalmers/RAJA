@@ -174,14 +174,14 @@ struct BuiltinAtomicCAS<8> {
  * Returns the OLD value that was replaced by the result of this operation.
  */
 template <typename T, typename OPER>
-RAJA_INLINE T builtin_atomic_CAS_oper(T volatile *acc, OPER &&oper)
+RAJA_INLINE T RAJA_HOST_DEVICE builtin_atomic_CAS_oper(T volatile *acc, OPER &&oper)
 {
   BuiltinAtomicCAS<sizeof(T)> cas;
   return cas(acc, std::forward<OPER>(oper), [](T const &) { return false; });
 }
 
 template <typename T, typename OPER, typename ShortCircuit>
-RAJA_INLINE T builtin_atomic_CAS_oper_sc(T volatile *acc,
+RAJA_INLINE T RAJA_HOST_DEVICE builtin_atomic_CAS_oper_sc(T volatile *acc,
                                          OPER &&oper,
                                          ShortCircuit const &sc)
 {
@@ -194,20 +194,20 @@ RAJA_INLINE T builtin_atomic_CAS_oper_sc(T volatile *acc,
 
 
 template <typename T>
-RAJA_INLINE T atomicAdd(builtin_atomic, T volatile *acc, T value)
+RAJA_INLINE T RAJA_HOST_DEVICE atomicAdd(builtin_atomic, T volatile *acc, T value)
 {
   return detail::builtin_atomic_CAS_oper(acc, [=](T a) { return a + value; });
 }
 
 
 template <typename T>
-RAJA_INLINE T atomicSub(builtin_atomic, T volatile *acc, T value)
+RAJA_INLINE T RAJA_HOST_DEVICE atomicSub(builtin_atomic, T volatile *acc, T value)
 {
   return detail::builtin_atomic_CAS_oper(acc, [=](T a) { return a - value; });
 }
 
 template <typename T>
-RAJA_INLINE T atomicMin(builtin_atomic, T volatile *acc, T value)
+RAJA_INLINE T RAJA_HOST_DEVICE atomicMin(builtin_atomic, T volatile *acc, T value)
 {
   if (*acc < value) {
     return *acc;
@@ -222,7 +222,7 @@ RAJA_INLINE T atomicMin(builtin_atomic, T volatile *acc, T value)
 }
 
 template <typename T>
-RAJA_INLINE T atomicMax(builtin_atomic, T volatile *acc, T value)
+RAJA_INLINE T RAJA_HOST_DEVICE atomicMax(builtin_atomic, T volatile *acc, T value)
 {
   if (*acc > value) {
     return *acc;
@@ -237,13 +237,13 @@ RAJA_INLINE T atomicMax(builtin_atomic, T volatile *acc, T value)
 }
 
 template <typename T>
-RAJA_INLINE T atomicInc(builtin_atomic, T volatile *acc)
+RAJA_INLINE T RAJA_HOST_DEVICE atomicInc(builtin_atomic, T volatile *acc)
 {
   return detail::builtin_atomic_CAS_oper(acc, [=](T a) { return a + 1; });
 }
 
 template <typename T>
-RAJA_INLINE T atomicInc(builtin_atomic, T volatile *acc, T val)
+RAJA_INLINE T RAJA_HOST_DEVICE atomicInc(builtin_atomic, T volatile *acc, T val)
 {
   return detail::builtin_atomic_CAS_oper(acc, [=](T old) {
     return ((old >= val) ? 0 : (old + 1));
@@ -251,13 +251,13 @@ RAJA_INLINE T atomicInc(builtin_atomic, T volatile *acc, T val)
 }
 
 template <typename T>
-RAJA_INLINE T atomicDec(builtin_atomic, T volatile *acc)
+RAJA_INLINE T RAJA_HOST_DEVICE atomicDec(builtin_atomic, T volatile *acc)
 {
   return detail::builtin_atomic_CAS_oper(acc, [=](T a) { return a - 1; });
 }
 
 template <typename T>
-RAJA_INLINE T atomicDec(builtin_atomic, T volatile *acc, T val)
+RAJA_INLINE T RAJA_HOST_DEVICE atomicDec(builtin_atomic, T volatile *acc, T val)
 {
   return detail::builtin_atomic_CAS_oper(acc, [=](T old) {
     return (((old == 0) | (old > val)) ? val : (old - 1));
@@ -265,25 +265,25 @@ RAJA_INLINE T atomicDec(builtin_atomic, T volatile *acc, T val)
 }
 
 template <typename T>
-RAJA_INLINE T atomicAnd(builtin_atomic, T volatile *acc, T value)
+RAJA_INLINE T RAJA_HOST_DEVICE atomicAnd(builtin_atomic, T volatile *acc, T value)
 {
   return detail::builtin_atomic_CAS_oper(acc, [=](T a) { return a & value; });
 }
 
 template <typename T>
-RAJA_INLINE T atomicOr(builtin_atomic, T volatile *acc, T value)
+RAJA_INLINE T RAJA_HOST_DEVICE atomicOr(builtin_atomic, T volatile *acc, T value)
 {
   return detail::builtin_atomic_CAS_oper(acc, [=](T a) { return a | value; });
 }
 
 template <typename T>
-RAJA_INLINE T atomicXor(builtin_atomic, T volatile *acc, T value)
+RAJA_INLINE T RAJA_HOST_DEVICE atomicXor(builtin_atomic, T volatile *acc, T value)
 {
   return detail::builtin_atomic_CAS_oper(acc, [=](T a) { return a ^ value; });
 }
 
 template <typename T>
-RAJA_INLINE T atomicExchange(builtin_atomic, T volatile *acc, T value)
+RAJA_INLINE T RAJA_HOST_DEVICE atomicExchange(builtin_atomic, T volatile *acc, T value)
 {
   return detail::builtin_atomic_CAS_oper(acc, [=](T) { return value; });
 }

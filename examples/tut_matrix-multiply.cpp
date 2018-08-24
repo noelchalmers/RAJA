@@ -826,51 +826,52 @@ int main(int RAJA_UNUSED_ARG(argc), char **RAJA_UNUSED_ARG(argv[]))
 //----------------------------------------------------------------------------//
 
 #if defined(RAJA_ENABLE_HIP)
+  /* This example casues a clang linker error. Unknown why */
 
-  std::cout << "\n Running HIP mat-mult with multiple lambdas (RAJA-POL8)...\n";
+  // std::cout << "\n Running HIP mat-mult with multiple lambdas (RAJA-POL8)...\n";
 
-  std::memset(C, 0, N*N * sizeof(double));
-  hipErrchk(hipMemcpy( d_C, C, N * N * sizeof(double), hipMemcpyHostToDevice ));
+  // std::memset(C, 0, N*N * sizeof(double));
+  // hipErrchk(hipMemcpy( d_C, C, N * N * sizeof(double), hipMemcpyHostToDevice ));
 
-  using EXEC_POL8 =
-    RAJA::KernelPolicy<
-      RAJA::statement::HipKernel<
-        RAJA::statement::For<1, RAJA::hip_block_exec,    // row
-          RAJA::statement::For<0, RAJA::hip_thread_exec, // col
-            RAJA::statement::Lambda<0>,   // dot = 0.0
-            RAJA::statement::For<2, RAJA::seq_exec,
-                RAJA::statement::Lambda<1> // dot += ...
-            >,
-            RAJA::statement::Lambda<2>   // set C = ...
-          >
-        >
-      >
-    >;
+  // using EXEC_POL8 =
+  //   RAJA::KernelPolicy<
+  //     RAJA::statement::HipKernel<
+  //       RAJA::statement::For<1, RAJA::hip_block_exec,    // row
+  //         RAJA::statement::For<0, RAJA::hip_thread_exec, // col
+  //           RAJA::statement::Lambda<0>,   // dot = 0.0
+  //           RAJA::statement::For<2, RAJA::seq_exec,
+  //               RAJA::statement::Lambda<1> // dot += ...
+  //           >,
+  //           RAJA::statement::Lambda<2>   // set C = ...
+  //         >
+  //       >
+  //     >
+  //   >;
 
-  RAJA::kernel_param<EXEC_POL8>(
-    RAJA::make_tuple(col_range, row_range, dot_range),
+  // RAJA::kernel_param<EXEC_POL8>(
+  //   RAJA::make_tuple(col_range, row_range, dot_range),
 
-    RAJA::tuple<double>{0.0},    // thread local variable for 'dot'
+  //   RAJA::tuple<double>{0.0},    // thread local variable for 'dot'
 
-    // lambda 0
-    [=] RAJA_DEVICE (int /* col */, int /* row */, int /* k */, double& dot) {
-       dot = 0.0;
-    },
+  //   // lambda 0
+  //   [=] RAJA_DEVICE (int /* col */, int /* row */, int /* k */, double& dot) {
+  //      dot = 0.0;
+  //   },
 
-    // lambda 1
-    [=] RAJA_DEVICE (int col, int row, int k, double& dot) {
-       dot += d_Aview(row, k) * d_Bview(k, col);
-    },
+  //   // lambda 1
+  //   [=] RAJA_DEVICE (int col, int row, int k, double& dot) {
+  //      dot += d_Aview(row, k) * d_Bview(k, col);
+  //   },
 
-    // lambda 2
-    [=] RAJA_DEVICE (int col, int row, int /* k */, double& dot) {
-       d_Cview(row, col) = dot;
-    }
+  //   // lambda 2
+  //   [=] RAJA_DEVICE (int col, int row, int /* k */, double& dot) {
+  //      d_Cview(row, col) = dot;
+  //   }
 
-  );
+  // );
 
-  hipErrchk(hipMemcpy( C, d_C, N * N * sizeof(double), hipMemcpyDeviceToHost ));
-  checkResult<double>(Cview, N);
+  // hipErrchk(hipMemcpy( C, d_C, N * N * sizeof(double), hipMemcpyDeviceToHost ));
+  // checkResult<double>(Cview, N);
 //printResult<double>(Cview, N);
 
 //----------------------------------------------------------------------------//
@@ -921,7 +922,7 @@ int main(int RAJA_UNUSED_ARG(argc), char **RAJA_UNUSED_ARG(argv[]))
   checkResult<double>(Cview, N);
 //printResult<double>(Cview, N);
 
-//----------------------------------------------------------------------------//
+// //----------------------------------------------------------------------------//
 
   std::cout << "\n Running HIP tiled mat-mult (no RAJA)...\n";
 
