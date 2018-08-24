@@ -8,7 +8,6 @@
  */
 
 #include "camp/camp.hpp"
-#include "camp/concepts.hpp"
 
 #include <iostream>
 #include <type_traits>
@@ -21,9 +20,6 @@ struct tuple;
 
 template <typename TagList, typename... Elements>
 class tagged_tuple;
-
-template <template <typename... Ts> class Tup>
-using is_tuple = typename std::is_base_of<tuple<>, Tup<>>::type;
 
 template <typename Tuple>
 struct tuple_size;
@@ -44,7 +40,6 @@ using tuple_ebt_t =
 
 namespace internal
 {
-
   template <class T>
   struct unwrap_refwrapper {
     using type = T;
@@ -85,12 +80,15 @@ namespace internal
     CAMP_HOST_DEVICE constexpr tuple_storage() : val(){};
 
     CAMP_SUPPRESS_HD_WARN
-    template <typename T>
-    CAMP_HOST_DEVICE constexpr tuple_storage(T&& v)
-        // initializing with (...) instead of {...} for compiler compatability
-        // some compilers complain when Type has no members and we use {...} to
-        // initialize val
-        : val(std::forward<T>(v))
+    CAMP_HOST_DEVICE constexpr tuple_storage(Type const& v) :
+    // initializing with (...) instead of {...} for compiler compatability
+    // some compilers complain when Type has no members and we use {...} to
+    // initialize val
+    val(v) {}
+
+    CAMP_SUPPRESS_HD_WARN
+    CAMP_HOST_DEVICE constexpr tuple_storage(Type&& v)
+        : val{std::move(static_cast<Type>(v))}
     {
     }
 
@@ -111,28 +109,19 @@ namespace internal
   template <typename... Types, camp::idx_t... Indices>
   struct tuple_helper<camp::idx_seq<Indices...>, camp::list<Types...>>
       : public internal::tuple_storage<Indices, Types>... {
-    template <bool B = concepts::metalib::all_of<
-                  std::is_default_constructible<Types>::value...>::value,
-              typename std::enable_if<B, void>::type* = nullptr>
-    CAMP_HOST_DEVICE constexpr tuple_helper()
+    CAMP_HOST_DEVICE constexpr tuple_helper() {}
+
+    CAMP_HOST_DEVICE constexpr tuple_helper(Types const&... args)
+        : internal::tuple_storage<Indices, Types>(args)...
     {
     }
-    CAMP_HOST_DEVICE constexpr tuple_helper(tuple_helper const& rhs)
+
+    CAMP_HOST_DEVICE constexpr tuple_helper(const tuple_helper& rhs)
         : tuple_storage<Indices, Types>(
               rhs.tuple_storage<Indices, Types>::get_inner())...
     {
     }
-    CAMP_HOST_DEVICE constexpr tuple_helper(tuple_helper&& rhs)
-        : tuple_storage<Indices, Types>(
-              std::forward<Types>(rhs.tuple_storage<Indices, Types>::val))...
-    {
-    }
 
-    template <typename... Args>
-    CAMP_HOST_DEVICE constexpr tuple_helper(Args&&... args)
-        : tuple_storage<Indices, Types>(std::forward<Args>(args))...
-    {
-    }
 
     template <typename RTuple>
     CAMP_HOST_DEVICE tuple_helper& operator=(const RTuple& rhs)
@@ -163,13 +152,6 @@ private:
   using Base = internal::tuple_helper<camp::make_idx_seq_t<sizeof...(Elements)>,
                                       camp::list<Elements...>>;
 
-  template <typename... Ts>
-  struct is_pack_this_tuple : false_type {
-  };
-  template <typename That>
-  struct is_pack_this_tuple<That> : std::is_same<tuple, decay<That>> {
-  };
-
 public:
   using TList = camp::list<Elements...>;
   using TMap = typename internal::tag_map<
@@ -197,33 +179,16 @@ private:
 public:
   // NOTE: __host__ __device__ on constructors causes warnings, and nothing else
   // Constructors
-  template <bool B = concepts::metalib::all_of<
-                std::is_default_constructible<Elements>::value...>::value,
-            typename std::enable_if<B, void>::type* = nullptr>
-  CAMP_HOST_DEVICE constexpr tuple() : base()
-  {
-  }
-
+  CAMP_HOST_DEVICE constexpr tuple() : base() {}
   CAMP_HOST_DEVICE constexpr tuple(tuple const& o) : base(o.base) {}
 
-  CAMP_HOST_DEVICE constexpr tuple(tuple&& o) : base(move(o.base)) {}
+  CAMP_HOST_DEVICE constexpr tuple(tuple&& o) : base(std::move(o.base)) {}
 
-  CAMP_HOST_DEVICE tuple& operator=(tuple const& rhs)
-  {
-    base = rhs.base;
-    return *this;
-  }
-  CAMP_HOST_DEVICE tuple& operator=(tuple&& rhs)
-  {
-    base = std::move(rhs.base);
-    return *this;
-  }
+  CAMP_HOST_DEVICE tuple& operator=(tuple const& rhs) { base = rhs.base; return *this; }
+  CAMP_HOST_DEVICE tuple& operator=(tuple&& rhs) { base = std::move(rhs.base); return *this; }
 
-  template <typename... Args,
-            typename std::enable_if<
-                !is_pack_this_tuple<Args...>::value>::type* = nullptr>
-  CAMP_HOST_DEVICE constexpr explicit tuple(Args&&... rest)
-      : base{std::forward<Args>(rest)...}
+  CAMP_HOST_DEVICE constexpr explicit tuple(Elements const&... rest)
+      : base{rest...}
   {
   }
 
@@ -244,13 +209,6 @@ class tagged_tuple : public tuple<Elements...>
   using Self = tagged_tuple;
   using Base = internal::tuple_helper<camp::make_idx_seq_t<sizeof...(Elements)>,
                                       camp::list<Elements...>>;
-  template <typename... Ts>
-  struct is_pack_this_tuple : false_type {
-  };
-  template <typename That>
-  struct is_pack_this_tuple<That> : std::is_same<tagged_tuple, decay<That>> {
-  };
-
 
 public:
   using TList = camp::list<Elements...>;
@@ -282,37 +240,20 @@ public:
 public:
   // NOTE: __host__ __device__ on constructors causes warnings, and nothing else
   // Constructors
-  template <bool B = concepts::metalib::all_of<
-                std::is_default_constructible<Elements>::value...>::value,
-            typename std::enable_if<B, void>::type* = nullptr>
-  CAMP_HOST_DEVICE constexpr tagged_tuple() : base()
-  {
-  }
+  CAMP_HOST_DEVICE constexpr tagged_tuple() : base() {}
+  CAMP_HOST_DEVICE constexpr tagged_tuple(tagged_tuple const& o) : base(o.base) {}
 
-  constexpr tagged_tuple(tagged_tuple const& o) = default;
+  CAMP_HOST_DEVICE constexpr tagged_tuple(tagged_tuple&& o) : base(std::move(o.base)) {}
 
-  constexpr tagged_tuple(tagged_tuple&& o) = default;
+  CAMP_HOST_DEVICE tagged_tuple& operator=(tagged_tuple const& rhs) { base = rhs.base; return *this;}
+  CAMP_HOST_DEVICE tagged_tuple& operator=(tagged_tuple&& rhs) { base = std::move(rhs.base); return *this;}
 
-  CAMP_HOST_DEVICE tagged_tuple& operator=(tagged_tuple const& rhs)
-  {
-    base = rhs.base;
-    return *this;
-  }
-  CAMP_HOST_DEVICE tagged_tuple& operator=(tagged_tuple&& rhs)
-  {
-    base = std::move(rhs.base);
-    return *this;
-  }
-
-  template <typename... Args,
-            typename std::enable_if<
-                !is_pack_this_tuple<Args...>::value>::type* = nullptr>
-  CAMP_HOST_DEVICE constexpr explicit tagged_tuple(Args const&... rest)
+  CAMP_HOST_DEVICE constexpr explicit tagged_tuple(Elements const&... rest)
       : base{rest...}
   {
   }
 
-  template <template <typename...> class T, typename... RTypes>
+  template <template<typename...> class T, typename... RTypes>
   CAMP_HOST_DEVICE CAMP_CONSTEXPR14 Self& operator=(const T<RTypes...>& rhs)
   {
     base.operator=(rhs);
@@ -341,7 +282,7 @@ CAMP_HOST_DEVICE constexpr auto get(const Tuple& t) noexcept
 {
   using internal::tpl_get_store;
   static_assert(tuple_size<Tuple>::value > index, "index out of range");
-  return static_cast<tpl_get_store<Tuple, index> const&>(t.base).get_inner();
+  return static_cast<tpl_get_store<Tuple, index> const &>(t.base).get_inner();
 }
 
 template <camp::idx_t index, class Tuple>
@@ -363,8 +304,7 @@ CAMP_HOST_DEVICE constexpr auto get(const Tuple& t) noexcept
   static_assert(!std::is_same<camp::nil, index_type>::value,
                 "invalid type index");
 
-  return static_cast<tpl_get_store<Tuple, index_type::value>&>(t.base)
-      .get_inner();
+  return static_cast<tpl_get_store<Tuple, index_type::value>&>(t.base).get_inner();
 }
 
 template <typename T, class Tuple>
@@ -375,8 +315,7 @@ CAMP_HOST_DEVICE constexpr auto get(Tuple& t) noexcept -> tuple_ebt_t<T, Tuple>&
   static_assert(!std::is_same<camp::nil, index_type>::value,
                 "invalid type index");
 
-  return static_cast<tpl_get_store<Tuple, index_type::value>&>(t.base)
-      .get_inner();
+  return static_cast<tpl_get_store<Tuple, index_type::value>&>(t.base).get_inner();
 }
 
 template <typename... Args>
@@ -431,27 +370,13 @@ template <typename... Lelem,
           typename... Relem,
           camp::idx_t... Lidx,
           camp::idx_t... Ridx>
-CAMP_HOST_DEVICE constexpr auto tuple_cat_pair(tuple<Lelem...> const& l,
+CAMP_HOST_DEVICE constexpr auto tuple_cat_pair(tuple<Lelem...>&& l,
                                                camp::idx_seq<Lidx...>,
-                                               tuple<Relem...> const& r,
+                                               tuple<Relem...>&& r,
                                                camp::idx_seq<Ridx...>) noexcept
-    -> tuple<camp::at_v<camp::list<Lelem...>, Lidx>...,
-             camp::at_v<camp::list<Relem...>, Ridx>...>
+    -> tuple<Lelem..., Relem...>
 {
   return make_tuple(get<Lidx>(l)..., get<Ridx>(r)...);
-}
-
-template <typename L, typename R>
-CAMP_HOST_DEVICE constexpr auto tuple_cat_pair(L const& l, R const& r) noexcept
-    -> decltype(tuple_cat_pair(l,
-                               camp::idx_seq_from_t<L>{},
-                               r,
-                               camp::idx_seq_from_t<R>{}))
-{
-  return tuple_cat_pair(l,
-                        camp::idx_seq_from_t<L>{},
-                        r,
-                        camp::idx_seq_from_t<R>{});
 }
 
 CAMP_SUPPRESS_HD_WARN

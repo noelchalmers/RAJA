@@ -49,21 +49,16 @@ namespace camp
 {
 
 // TODO: document, consider making use/match std::integral_constant
-template <class NumT, NumT v>
+template <class T, T v>
 struct integral_constant {
-  static constexpr NumT value = v;
-  using value_type = NumT;
+  static constexpr T value = v;
+  using value_type = T;
   using type = integral_constant;
   constexpr operator value_type() const noexcept { return value; }
   constexpr value_type operator()() const noexcept { return value; }
 };
 
 // TODO: document
-/**
- * @brief Short-form for a whole number
- *
- * @tparam N The integral value
- */
 template <idx_t N>
 using num = integral_constant<idx_t, N>;
 
