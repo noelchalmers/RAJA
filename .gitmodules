@@ -1,6 +1,9 @@
 #[submodule "blt"]
 #	path = blt
 #	url = https://github.com/LLNL/blt.git
+[submodule "blt"]
+	path = blt
+	url = http://gitlab1.amd.com/nchalmer/blt.git
 [submodule "include/cub"]
 	path = tpl/cub
 	url = https://github.com/NVlabs/cub.git
