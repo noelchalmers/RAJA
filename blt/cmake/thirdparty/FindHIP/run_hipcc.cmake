@@ -32,16 +32,7 @@ set(HCC_HOME "@HCC_HOME@") #path
 @_HIP_HIPCC_FLAGS@
 @_HIP_HCC_FLAGS@
 @_HIP_NVCC_FLAGS@
-
-set(HIP_HIPCC_INCLUDE_ARGS "@HIP_HIPCC_INCLUDE_ARGS@")
-list(REMOVE_DUPLICATES HIP_HIPCC_INCLUDE_ARGS)
-set(HIP_HIPCC_INCLUDE_DIRS)
-foreach(dir ${HIP_HIPCC_INCLUDE_ARGS})
-  # Extra quotes are added around each flag to help HIPCC parse out flags with spaces.
-  list(APPEND HIP_HIPCC_INCLUDE_DIRS "-I${dir}")
-endforeach()
-
-#set(HIP_HIPCC_INCLUDE_ARGS "@HIP_HIPCC_INCLUDE_ARGS@") # list (needs to be in quotes to handle spaces properly)
+set(HIP_HIPCC_INCLUDE_ARGS "@HIP_HIPCC_INCLUDE_ARGS@") # list (needs to be in quotes to handle spaces properly)
 
 set(cmake_dependency_file "@cmake_dependency_file@") # path
 set(source_file "@source_file@") # path
@@ -63,7 +54,7 @@ else()
     set(__CC ${HIP_HOST_COMPILER})
     set(__CC_FLAGS ${CMAKE_HOST_FLAGS} ${CMAKE_HOST_FLAGS_${build_configuration}})
 endif()
-set(__CC_INCLUDES ${HIP_HIPCC_INCLUDE_DIRS})
+set(__CC_INCLUDES ${HIP_HIPCC_INCLUDE_ARGS})
 
 # hip_execute_process - Executes a command with optional command echo and status message.
 #   status     - Status message to print if verbose is true
@@ -102,7 +93,6 @@ hip_execute_process(
     COMMAND "${CMAKE_COMMAND}" -E remove "${generated_file}"
     )
 
-
 # Generate the dependency file
 hip_execute_process(
     "Generating dependency file: ${cmake_dependency_file}.pre"
@@ -111,7 +101,6 @@ hip_execute_process(
     "${source_file}"
     -o "${cmake_dependency_file}.pre"
     ${__CC_FLAGS}
-    -std=c++14 -famp
     ${__CC_INCLUDES}
     )
 
@@ -157,7 +146,6 @@ endif()
 hip_execute_process(
     "Generating ${generated_file}"
     COMMAND "${__CC}"
-    -std=c++14 -famp
     -c
     "${source_file}"
     -o "${generated_file}"

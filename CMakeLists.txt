@@ -29,23 +29,18 @@ if (NOT RAJA_LOADED)
 
   cmake_minimum_required (VERSION 3.3)
 
+  # C is required for googletest to find Threads
+  project(RAJA LANGUAGES CXX C
+    VERSION ${RAJA_LOADED})
+
+  set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/thirdparty" ${CMAKE_MODULE_PATH})
+
   # Build options
   set(ENABLE_OPENMP Off)
   set(ENABLE_CUDA Off CACHE Bool "Build CUDA support")
   set(ENABLE_HIP Off CACHE Bool "Build HIP support")
   set(ENABLE_COPY_HEADERS Off CACHE Bool "")
   set(ENABLE_WARNINGS_AS_ERRORS Off CACHE Bool "")
-
-  if (ENABLE_HIP)
-    set(CMAKE_CXX_COMPILER /usr/bin/clang++)
-    set(CMAKE_C_COMPILER /usr/bin/clang)
-  endif ()
-
-  # C is required for googletest to find Threads
-  project(RAJA LANGUAGES CXX C
-    VERSION ${RAJA_LOADED})
-
-  set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/thirdparty" ${CMAKE_MODULE_PATH})
 
   set(RAJA_CXX_STANDARD_FLAG "default" CACHE STRING "Specific c++ standard flag to use, default attempts to autodetect the highest available")
 
