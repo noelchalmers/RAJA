@@ -43,7 +43,6 @@
 #if defined(RAJA_ENABLE_CUDA)
 #define CUDA_BLOCK_SIZE 16
 #elif defined(RAJA_ENABLE_HIP)
-#include <hip/hip_runtime.h>
 #define HIP_BLOCK_SIZE 16
 #endif
 

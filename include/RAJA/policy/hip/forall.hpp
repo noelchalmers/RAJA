@@ -84,17 +84,9 @@ dim3 getGridDim(size_t len, dim3 blockDim)
  *
  ******************************************************************************
  */
-__device__ __forceinline__ unsigned int getGlobalIdx_1D_1D()
-{
-  unsigned int blockId = blockIdx.x;
-  unsigned int threadId = blockId * blockDim.x + threadIdx.x;
-  return threadId;
-}
-__device__ __forceinline__ unsigned int getGlobalNumThreads_1D_1D()
-{
-  unsigned int numThreads = blockDim.x * gridDim.x;
-  return numThreads;
-}
+__device__ __forceinline__ unsigned int getGlobalIdx_1D_1D();
+
+__device__ __forceinline__ unsigned int getGlobalNumThreads_1D_1D();
 
 /*!
  ******************************************************************************
@@ -103,21 +95,9 @@ __device__ __forceinline__ unsigned int getGlobalNumThreads_1D_1D()
  *
  ******************************************************************************
  */
-__device__ __forceinline__ unsigned int getGlobalIdx_3D_3D()
-{
-  unsigned int blockId =
-      blockIdx.x + blockIdx.y * gridDim.x + gridDim.x * gridDim.y * blockIdx.z;
-  unsigned int threadId = blockId * (blockDim.x * blockDim.y * blockDim.z)
-                          + (threadIdx.z * (blockDim.x * blockDim.y))
-                          + (threadIdx.y * blockDim.x) + threadIdx.x;
-  return threadId;
-}
-__device__ __forceinline__ unsigned int getGlobalNumThreads_3D_3D()
-{
-  unsigned int numThreads =
-      blockDim.x * blockDim.y * blockDim.z * gridDim.x * gridDim.y * gridDim.z;
-  return numThreads;
-}
+__device__ __forceinline__ unsigned int getGlobalIdx_3D_3D();
+
+__device__ __forceinline__ unsigned int getGlobalNumThreads_3D_3D();
 
 //
 //////////////////////////////////////////////////////////////////////

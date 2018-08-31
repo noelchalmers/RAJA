@@ -22,10 +22,6 @@
 
 #include <cstdio>
 
-#include <hip/hip_runtime.h>
-
-
-
 using namespace RAJA;
 
 

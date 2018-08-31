@@ -28,12 +28,12 @@
 
 #include "RAJA/config.hpp"
 
-#ifdef RAJA_ENABLE_HIP
-#include <hip/hip_runtime.h>
-#endif
-
 #include <cstdlib>
 #include <stdexcept>
+
+#if defined(RAJA_ENABLE_HIP)
+#include <hip/hip_runtime.h>
+#endif
 
 //
 // Macros for decorating host/device functions for CUDA kernels.

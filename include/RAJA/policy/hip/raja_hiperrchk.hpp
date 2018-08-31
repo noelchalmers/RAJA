@@ -35,8 +35,6 @@
 #include <iostream>
 #include <string>
 
-#include <hip/hip_runtime.h>
-
 #include "RAJA/util/macros.hpp"
 
 namespace RAJA
