@@ -22,7 +22,7 @@ mkdir build_ubuntu_hipcc_clang-coral-2018.04.28 && cd build_ubuntu_hipcc_clang-c
 cmake \
   -DCMAKE_BUILD_TYPE=Release \
   -C ../host-configs/hipcc_clang_coral_2018_08_28.cmake \
-  -DENABLE_OPENMP=Off \
+  -DENABLE_OPENMP=On \
   -DENABLE_HIP=On \
   "$@" \
   ..

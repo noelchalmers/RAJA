@@ -36,7 +36,7 @@ if (NOT RAJA_LOADED)
   set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/thirdparty" ${CMAKE_MODULE_PATH})
 
   # Build options
-  set(ENABLE_OPENMP Off)
+  set(ENABLE_OPENMP Off CACHE Bool "Build OpenMP support")
   set(ENABLE_CUDA Off CACHE Bool "Build CUDA support")
   set(ENABLE_HIP Off CACHE Bool "Build HIP support")
   set(ENABLE_COPY_HEADERS Off CACHE Bool "")

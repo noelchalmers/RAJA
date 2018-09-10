@@ -41,6 +41,8 @@
 */
 #if defined(RAJA_ENABLE_CUDA)
 const int CUDA_BLOCK_SIZE = 256;
+#elif defined(RAJA_ENABLE_HIP)
+const int HIP_BLOCK_SIZE = 256;
 #endif
 
 int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
@@ -62,7 +64,7 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
     if ( i % 2 == 0 ) {
       a[i] = 1;
     } else {
-      a[i] = -1; 
+      a[i] = -1;
     }
   }
 
@@ -98,7 +100,7 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
 
   using EXEC_POL1   = RAJA::seq_exec;
   using REDUCE_POL1 = RAJA::seq_reduce;
- 
+
   RAJA::ReduceSum<REDUCE_POL1, int> seq_sum(0);
   RAJA::ReduceMin<REDUCE_POL1, int> seq_min(std::numeric_limits<int>::max());
   RAJA::ReduceMax<REDUCE_POL1, int> seq_max(std::numeric_limits<int>::min());
@@ -106,7 +108,7 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
   RAJA::ReduceMaxLoc<REDUCE_POL1, int> seq_maxloc(std::numeric_limits<int>::min(), -1);
 
   RAJA::forall<EXEC_POL1>(arange, [=](int i) {
-    
+
     seq_sum += a[i];
 
     seq_min.min(a[i]);
@@ -120,11 +122,11 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
   std::cout << "\tsum = " << seq_sum.get() << std::endl;
   std::cout << "\tmin = " << seq_min.get() << std::endl;
   std::cout << "\tmax = " << seq_max.get() << std::endl;
-  std::cout << "\tmin, loc = " << seq_minloc.get() << " , " 
+  std::cout << "\tmin, loc = " << seq_minloc.get() << " , "
                                << seq_minloc.getLoc() << std::endl;
-  std::cout << "\tmax, loc = " << seq_maxloc.get() << " , " 
+  std::cout << "\tmax, loc = " << seq_maxloc.get() << " , "
                                << seq_maxloc.getLoc() << std::endl;
-  
+
 
 //----------------------------------------------------------------------------//
 
@@ -158,7 +160,7 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
   std::cout << "\tmin, loc = " << omp_minloc.get() << " , "
                                << omp_minloc.getLoc() << std::endl;
   std::cout << "\tmax, loc = " << omp_maxloc.get() << " , "
-                               << omp_maxloc.getLoc() << std::endl; 
+                               << omp_maxloc.getLoc() << std::endl;
 #endif
 
 
@@ -199,12 +201,52 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
 
 //----------------------------------------------------------------------------//
 
+#if defined(RAJA_ENABLE_HIP)
+  std::cout << "\n Running RAJA HIP reductions...\n";
+
+  int* d_a = memoryManager::allocate_gpu<int>(N);
+  hipErrchk(hipMemcpy( d_a, a, N * sizeof(int), hipMemcpyHostToDevice ));
+
+  using EXEC_POL3   = RAJA::hip_exec<HIP_BLOCK_SIZE>;
+  using REDUCE_POL3 = RAJA::hip_reduce<HIP_BLOCK_SIZE>;
+
+  RAJA::ReduceSum<REDUCE_POL3, int> hip_sum(0);
+  RAJA::ReduceMin<REDUCE_POL3, int> hip_min(std::numeric_limits<int>::max());
+  RAJA::ReduceMax<REDUCE_POL3, int> hip_max(std::numeric_limits<int>::min());
+  RAJA::ReduceMinLoc<REDUCE_POL3, int> hip_minloc(std::numeric_limits<int>::max(), -1);
+  RAJA::ReduceMaxLoc<REDUCE_POL3, int> hip_maxloc(std::numeric_limits<int>::min(), -1);
+
+  RAJA::forall<EXEC_POL3>(arange, [=] RAJA_DEVICE (int i) {
+
+    hip_sum += d_a[i];
+
+    hip_min.min(d_a[i]);
+    hip_max.max(d_a[i]);
+
+    hip_minloc.minloc(d_a[i], i);
+    hip_maxloc.maxloc(d_a[i], i);
+
+  });
+
+  std::cout << "\tsum = " << hip_sum.get() << std::endl;
+  std::cout << "\tmin = " << hip_min.get() << std::endl;
+  std::cout << "\tmax = " << hip_max.get() << std::endl;
+  std::cout << "\tmin, loc = " << hip_minloc.get() << " , "
+                               << hip_minloc.getLoc() << std::endl;
+  std::cout << "\tmax, loc = " << hip_maxloc.get() << " , "
+                               << hip_maxloc.getLoc() << std::endl;
+
+  memoryManager::deallocate_gpu(d_a);
+#endif
+
+//----------------------------------------------------------------------------//
+
 //
 // Clean up.
 //
   memoryManager::deallocate(a);
 
   std::cout << "\n DONE!...\n";
- 
+
   return 0;
 }
