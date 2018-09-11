@@ -123,10 +123,10 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
 
   using ATOMIC_POL2 = RAJA::atomic::omp_atomic;
 
-  RAJA::forall<EXEC_POL2>(bins, [=](int i) {
-      double x = (double(i) + 0.5) / num_bins;
-      RAJA::atomic::atomicAdd<ATOMIC_POL2>(atomic_pi, 4.0 / (1.0 + x * x));
-  });
+  // RAJA::forall<EXEC_POL2>(bins, [=](int i) {
+  //     double x = (double(i) + 0.5) / num_bins;
+  //     RAJA::atomic::atomicAdd<ATOMIC_POL2>(atomic_pi, 4.0 / (1.0 + x * x));
+  // });
 
   std::cout << "\tpi = " << std::setprecision(prec)
             << (*atomic_pi) / num_bins << std::endl;

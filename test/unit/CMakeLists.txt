@@ -34,9 +34,9 @@ raja_add_test(
   NAME test-view
   SOURCES test-view.cpp)
 
-raja_add_test(
-  NAME test-timer
-  SOURCES test-timer.cpp)
+# raja_add_test(
+#   NAME test-timer
+#   SOURCES test-timer.cpp)
 
 raja_add_test(
   NAME test-integral-limits

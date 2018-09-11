@@ -173,11 +173,11 @@ HIP_TEST_F(ReduceMinHIP, indexset_align)
     }
     hipMemcpy(d_dvalue, dvalue, sizeof(double) * TEST_VEC_LEN, hipMemcpyHostToDevice);
 
-    forall<ExecPolicy<seq_segit, hip_exec<block_size> > >(
-        iset, [=] RAJA_DEVICE(int i) {
-          dmin0.min(d_dvalue[i]);
-          dmin1.min(2 * d_dvalue[i]);
-        });
+    // forall<ExecPolicy<seq_segit, hip_exec<block_size> > >(
+    //     iset, [=] RAJA_DEVICE(int i) {
+    //       dmin0.min(d_dvalue[i]);
+    //       dmin1.min(2 * d_dvalue[i]);
+    //     });
 
     ASSERT_FLOAT_EQ(dcurrentMin, double(dmin0));
     ASSERT_FLOAT_EQ(2 * dcurrentMin, double(dmin1));
@@ -231,11 +231,11 @@ HIP_TEST_F(ReduceMinHIP, indexset_noalign)
     }
     hipMemcpy(d_dvalue, dvalue, sizeof(double) * TEST_VEC_LEN, hipMemcpyHostToDevice);
 
-    forall<ExecPolicy<seq_segit, hip_exec<block_size> > >(
-        iset, [=] RAJA_HOST_DEVICE(int i) {
-          dmin0.min(d_dvalue[i]);
-          dmin1.min(2 * d_dvalue[i]);
-        });
+    // forall<ExecPolicy<seq_segit, hip_exec<block_size> > >(
+    //     iset, [=] RAJA_HOST_DEVICE(int i) {
+    //       dmin0.min(d_dvalue[i]);
+    //       dmin1.min(2 * d_dvalue[i]);
+    //     });
 
     ASSERT_FLOAT_EQ(dcurrentMin, double(dmin0));
     ASSERT_FLOAT_EQ(2 * dcurrentMin, double(dmin1));

@@ -19,20 +19,20 @@ blt_add_library(
   SOURCES buildIndexSet.cpp
   DEPENDS_ON RAJA ${raja_depends})
 
-raja_add_test(
-  NAME test-reduce
-  SOURCES test-reduce.cpp
-  DEPENDS_ON bis)
+# raja_add_test(
+#   NAME test-reduce
+#   SOURCES test-reduce.cpp
+#   DEPENDS_ON bis)
 
-raja_add_test(
-  NAME test-forall
-  SOURCES test-forall.cpp
-  DEPENDS_ON bis)
+# raja_add_test(
+#   NAME test-forall
+#   SOURCES test-forall.cpp
+#   DEPENDS_ON bis)
 
-raja_add_test(
-  NAME test-indexset
-  SOURCES test-indexset.cpp
-  DEPENDS_ON bis)
+# raja_add_test(
+#   NAME test-indexset
+#   SOURCES test-indexset.cpp
+#   DEPENDS_ON bis)
 
 raja_add_test(
   NAME test-nested

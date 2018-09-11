@@ -26,9 +26,9 @@ raja_add_executable(
   NAME tut_dot-product
   SOURCES tut_dot-product.cpp)
 
-raja_add_executable(
-  NAME tut_indexset-segments
-  SOURCES tut_indexset-segments.cpp)
+# raja_add_executable(
+#   NAME tut_indexset-segments
+#   SOURCES tut_indexset-segments.cpp)
 
 raja_add_executable(
   NAME tut_matrix-multiply
@@ -38,9 +38,9 @@ raja_add_executable(
   NAME tut_nested-loop-reorder
   SOURCES tut_nested-loop-reorder.cpp)
 
-raja_add_executable(
-  NAME tut_vertexsum-coloring
-  SOURCES tut_vertexsum-coloring.cpp)
+# raja_add_executable(
+#   NAME tut_vertexsum-coloring
+#   SOURCES tut_vertexsum-coloring.cpp)
 
 raja_add_executable(
   NAME tut_reductions
@@ -70,9 +70,9 @@ raja_add_executable(
   NAME jacobi
   SOURCES jacobi.cpp)
 
-raja_add_executable(
-  NAME red-black-gauss-seidel
-  SOURCES red-black-gauss-seidel.cpp)
+# raja_add_executable(
+#   NAME red-black-gauss-seidel
+#   SOURCES red-black-gauss-seidel.cpp)
 
 raja_add_executable(
   NAME wave-eqn
@@ -86,9 +86,9 @@ raja_add_executable(
 endif()
 
 if(ENABLE_HIP)
-raja_add_executable(
-  NAME hip-shmem-ltimes
-  SOURCES hip-shmem-ltimes.cpp)
+# raja_add_executable(
+#   NAME hip-shmem-ltimes
+#   SOURCES hip-shmem-ltimes.cpp)
 endif()
 
 raja_add_executable(

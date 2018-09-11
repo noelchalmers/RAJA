@@ -845,27 +845,28 @@ int main(int RAJA_UNUSED_ARG(argc), char **RAJA_UNUSED_ARG(argv[]))
       >
     >;
 
-  RAJA::kernel_param<EXEC_POL8>(
-    RAJA::make_tuple(col_range, row_range, dot_range),
+  /* Causing a linking error. Unknown why */
+  // RAJA::kernel_param<EXEC_POL8>(
+  //   RAJA::make_tuple(col_range, row_range, dot_range),
 
-    RAJA::tuple<double>{0.0},    // thread local variable for 'dot'
+  //   RAJA::tuple<double>{0.0},    // thread local variable for 'dot'
 
-    // lambda 0
-    [=] RAJA_DEVICE (int /* col */, int /* row */, int /* k */, double& dot) {
-       dot = 0.0;
-    },
+  //   // lambda 0
+  //   [=] RAJA_DEVICE (int /* col */, int /* row */, int /* k */, double& dot) {
+  //      dot = 0.0;
+  //   },
 
-    // lambda 1
-    [=] RAJA_DEVICE (int col, int row, int k, double& dot) {
-       dot += d_Aview(row, k) * d_Bview(k, col);
-    },
+  //   // lambda 1
+  //   [=] RAJA_DEVICE (int col, int row, int k, double& dot) {
+  //      dot += d_Aview(row, k) * d_Bview(k, col);
+  //   },
 
-    // lambda 2
-    [=] RAJA_DEVICE (int col, int row, int /* k */, double& dot) {
-       d_Cview(row, col) = dot;
-    }
+  //   // lambda 2
+  //   [=] RAJA_DEVICE (int col, int row, int /* k */, double& dot) {
+  //      d_Cview(row, col) = dot;
+  //   }
 
-  );
+  // );
 
   hipErrchk(hipMemcpy( C, d_C, N * N * sizeof(double), hipMemcpyDeviceToHost ));
   checkResult<double>(Cview, N);

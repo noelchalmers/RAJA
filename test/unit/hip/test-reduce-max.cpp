@@ -174,11 +174,11 @@ HIP_TEST_F(ReduceMaxHIP, indexset_align)
     }
     hipMemcpy(d_dvalue, dvalue, sizeof(double) * TEST_VEC_LEN, hipMemcpyHostToDevice);
 
-    forall<ExecPolicy<seq_segit, hip_exec<block_size> > >(
-        iset, [=] RAJA_HOST_DEVICE(int i) {
-          dmax0.max(d_dvalue[i]);
-          dmax1.max(2 * d_dvalue[i]);
-        });
+    // forall<ExecPolicy<seq_segit, hip_exec<block_size> > >(
+    //     iset, [=] RAJA_HOST_DEVICE(int i) {
+    //       dmax0.max(d_dvalue[i]);
+    //       dmax1.max(2 * d_dvalue[i]);
+    //     });
 
     ASSERT_FLOAT_EQ(dcurrentMax, double(dmax0));
     ASSERT_FLOAT_EQ(2 * dcurrentMax, double(dmax1));
@@ -232,11 +232,11 @@ HIP_TEST_F(ReduceMaxHIP, indexset_noalign)
     }
     hipMemcpy(d_dvalue, dvalue, sizeof(double) * TEST_VEC_LEN, hipMemcpyHostToDevice);
 
-    forall<ExecPolicy<seq_segit, hip_exec<block_size> > >(
-        iset, [=] RAJA_DEVICE(int i) {
-          dmax0.max(d_dvalue[i]);
-          dmax1.max(2 * d_dvalue[i]);
-        });
+    // forall<ExecPolicy<seq_segit, hip_exec<block_size> > >(
+    //     iset, [=] RAJA_DEVICE(int i) {
+    //       dmax0.max(d_dvalue[i]);
+    //       dmax1.max(2 * d_dvalue[i]);
+    //     });
 
     ASSERT_FLOAT_EQ(dcurrentMax, double(dmax0));
     ASSERT_FLOAT_EQ(2 * dcurrentMax, double(dmax1));

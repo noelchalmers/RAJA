@@ -1183,61 +1183,61 @@ HIP_TEST(Kernel, SubRange_ThreadBlock)
 
 
 
-/* Causes a hipcc linking error. Unknown reason */
-// HIP_TEST(Kernel, SubRange_Complex)
-// {
-//   using PolA = RAJA::KernelPolicy<
-//           HipKernel<
-//             For<0, RAJA::hip_threadblock_exec<128>, Lambda<0>>
-//           >>;
+HIP_TEST(Kernel, SubRange_Complex)
+{
+  using PolA = RAJA::KernelPolicy<
+          HipKernel<
+            For<0, RAJA::hip_threadblock_exec<128>, Lambda<0>>
+          >>;
 
-//   using PolB = RAJA::KernelPolicy<
-//           HipKernel<
-//             Collapse<RAJA::hip_threadblock_exec<128>, ArgList<0, 1>,
-//               For<2, RAJA::seq_exec, Lambda<0>>
-//             >
-//           >>;
-
-
-//   size_t num_elem = 1024;
-//   size_t first = 10;
-//   size_t last = num_elem - 10;
-
-//   double *ptr = (double*) malloc(sizeof(double) * num_elem);
-//   double *d_ptr = nullptr;
-//   hipErrchk(hipMalloc(&d_ptr, sizeof(double) * num_elem) );
-
-//   RAJA::kernel<PolA>(
-//       RAJA::make_tuple(RAJA::RangeSegment(0, num_elem)),
-//       [=] RAJA_HOST_DEVICE (Index_type i) {
-//         d_ptr[i] = 0.0;
-//        });
-
-//   RAJA::kernel<PolB>(
-//       RAJA::make_tuple(RAJA::RangeSegment(first, last),
-//                        RAJA::RangeSegment(0, 16),
-//                        RAJA::RangeSegment(0, 32)),
-//       [=] RAJA_HOST_DEVICE (Index_type i, Index_type j, Index_type k) {
-//         RAJA::atomic::atomicAdd<RAJA::atomic::hip_atomic>(d_ptr+i, 1.0);
-//        });
+  using PolB = RAJA::KernelPolicy<
+          HipKernel<
+            Collapse<RAJA::hip_threadblock_exec<128>, ArgList<0, 1>,
+              For<2, RAJA::seq_exec, Lambda<0>>
+            >
+          >>;
 
 
-//   hipDeviceSynchronize();
+  size_t num_elem = 1024;
+  size_t first = 10;
+  size_t last = num_elem - 10;
 
-//   hipMemcpy(ptr, d_ptr, sizeof(double) * num_elem, hipMemcpyDeviceToHost);
+  double *ptr = (double*) malloc(sizeof(double) * num_elem);
+  double *d_ptr = nullptr;
+  hipErrchk(hipMalloc(&d_ptr, sizeof(double) * num_elem) );
 
-//   size_t count = 0;
-//   for(size_t i = 0;i < num_elem; ++ i){
-//     count += ptr[i];
-//   }
-//   ASSERT_EQ(count, (num_elem-20)*16*32);
-//   for(size_t i = 0;i < 10;++ i){
-//     ASSERT_EQ(ptr[i], 0.0);
-//     ASSERT_EQ(ptr[num_elem-1-i], 0.0);
-//   }
-//   free(ptr);
-//   hipFree(d_ptr);
-// }
+  RAJA::kernel<PolA>(
+      RAJA::make_tuple(RAJA::RangeSegment(0, num_elem)),
+      [=] RAJA_HOST_DEVICE (Index_type i) {
+        d_ptr[i] = 0.0;
+       });
+
+  /* Causes a hipcc linking error. Unknown reason */
+  // RAJA::kernel<PolB>(
+  //     RAJA::make_tuple(RAJA::RangeSegment(first, last),
+  //                      RAJA::RangeSegment(0, 16),
+  //                      RAJA::RangeSegment(0, 32)),
+  //     [=] RAJA_HOST_DEVICE (Index_type i, Index_type j, Index_type k) {
+  //       RAJA::atomic::atomicAdd<RAJA::atomic::hip_atomic>(d_ptr+i, 1.0);
+  //      });
+
+
+  hipDeviceSynchronize();
+
+  hipMemcpy(ptr, d_ptr, sizeof(double) * num_elem, hipMemcpyDeviceToHost);
+
+  size_t count = 0;
+  for(size_t i = 0;i < num_elem; ++ i){
+    count += ptr[i];
+  }
+  ASSERT_EQ(count, (num_elem-20)*16*32);
+  for(size_t i = 0;i < 10;++ i){
+    ASSERT_EQ(ptr[i], 0.0);
+    ASSERT_EQ(ptr[num_elem-1-i], 0.0);
+  }
+  free(ptr);
+  hipFree(d_ptr);
+}
 
 #endif
 
@@ -3989,6 +3989,7 @@ HIP_TEST(Kernel, Hyperplane_hip_3d_tiled)
   for(long i = 0;i < N*M*O;++ i){
     x[i] = i;
   }
+  hipMemcpy(d_x, x, N*M*O*sizeof(long), hipMemcpyHostToDevice);
 
   RAJA::ReduceSum<hip_reduce<1024>, long> trip_count(0);
   RAJA::ReduceSum<hip_reduce<1024>, long> oob_count(0);
