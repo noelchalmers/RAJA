@@ -6,4 +6,4 @@
 	url = https://github.com/NVlabs/cub.git
 [submodule "blt"]
 	path = blt
-	url = http://gitlab1.amd.com/nchalmer/blt.git
+	url = http://github.com/nchalmer/blt.git
