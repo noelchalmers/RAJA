@@ -257,13 +257,13 @@ HIP_TEST_F(ReduceSumHIP, indexset_noalign)
   ReduceSum<hip_reduce<block_size>, double> dsum2(dtinit * 3.0);
   ReduceSum<hip_reduce<block_size>, int> isum3(itinit * 4);
 
-  // forall<ExecPolicy<seq_segit, hip_exec<block_size> > >(
-  //     iset, [=] RAJA_DEVICE(int i) {
-  //       dsum0 += dvalue[i];
-  //       isum1 += 2 * ivalue[i];
-  //       dsum2 += 3 * dvalue[i];
-  //       isum3 += 4 * ivalue[i];
-  //     });
+  forall<ExecPolicy<seq_segit, hip_exec<block_size> > >(
+      iset, [=] RAJA_DEVICE(int i) {
+        dsum0 += dvalue[i];
+        isum1 += 2 * ivalue[i];
+        dsum2 += 3 * dvalue[i];
+        isum3 += 4 * ivalue[i];
+      });
 
   double dbase_chk_val = dinit_val * double(iset.getLength());
   int ibase_chk_val = iinit_val * double(iset.getLength());

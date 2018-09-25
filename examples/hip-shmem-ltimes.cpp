@@ -25,12 +25,15 @@
 using namespace RAJA;
 
 
-RAJA_INDEX_VALUE_T(IMoment, int, "IMoment");
-RAJA_INDEX_VALUE_T(IDirection, int, "IDirection");
-RAJA_INDEX_VALUE_T(IGroup, int, "IGroup");
-RAJA_INDEX_VALUE_T(IZone, int, "IZone");
+// RAJA_INDEX_VALUE_T(IMoment, int, "IMoment");
+// RAJA_INDEX_VALUE_T(IDirection, int, "IDirection");
+// RAJA_INDEX_VALUE_T(IGroup, int, "IGroup");
+// RAJA_INDEX_VALUE_T(IZone, int, "IZone");
 
-
+RAJA_INDEX_VALUE(IMoment, "IMoment");
+RAJA_INDEX_VALUE(IDirection, "IDirection");
+RAJA_INDEX_VALUE(IGroup, "IGroup");
+RAJA_INDEX_VALUE(IZone, "IZone");
 
 void runLTimesRajaHipNested(bool debug,
     Index_type num_moments,
