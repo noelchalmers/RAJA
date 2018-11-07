@@ -41,6 +41,7 @@ enum class Policy {
   openmp,
   target_openmp,
   cuda,
+  hip,
   tbb
 };
 
@@ -55,7 +56,7 @@ enum class Pattern {
 
 enum class Launch { undefined, sync, async };
 
-enum class Platform { undefined = 0, host = 1, cuda = 2, omp_target = 4 };
+enum class Platform { undefined = 0, host = 1, cuda = 2, omp_target = 4, hip = 8 };
 
 struct PolicyBase {
 };

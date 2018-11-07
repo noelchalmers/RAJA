@@ -37,10 +37,10 @@
  */
 
 /*
-  CUDA_BLOCK_SIZE - specifies the number of threads in a CUDA thread block
+  BLOCK_SIZE - specifies the number of threads in a CUDA thread block
 */
-#if defined(RAJA_ENABLE_CUDA)
-const int CUDA_BLOCK_SIZE = 256;
+#if defined(RAJA_ENABLE_CUDA) || defined(RAJA_ENABLE_HIP)
+const int BLOCK_SIZE = 256;
 #endif
 
 template <typename T>
@@ -123,7 +123,7 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
   std::cout << "\n\nRunning RAJA CUDA binning" << std::endl;
   std::memset(bins, 0, M * sizeof(int));
 
-  using EXEC_POL4 = RAJA::cuda_exec<CUDA_BLOCK_SIZE>;
+  using EXEC_POL4 = RAJA::cuda_exec<BLOCK_SIZE>;
   using ATOMIC_POL4 = RAJA::atomic::cuda_atomic;
 
   RAJA::forall<EXEC_POL4>(array_range, [=] RAJA_DEVICE(int i) {
@@ -150,8 +150,54 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
   printBins(bins, M);
   
 #endif
-  //----------------------------------------------------------------------------//
+//----------------------------------------------------------------------------//
 
+#if defined(RAJA_ENABLE_HIP)
+
+  std::cout << "\n\nRunning RAJA HIP binning" << std::endl;
+  std::memset(bins, 0, M * sizeof(int));
+
+  int* d_array = memoryManager::allocate_gpu<int>(N);
+  int* d_bins  = memoryManager::allocate_gpu<int>(M);
+  hipErrchk(hipMemcpy( d_array, array, N * sizeof(int), hipMemcpyHostToDevice ));
+  hipErrchk(hipMemcpy( d_bins, bins, M * sizeof(int), hipMemcpyHostToDevice ));
+
+  using EXEC_POL4 = RAJA::hip_exec<BLOCK_SIZE>;
+  using ATOMIC_POL4 = RAJA::atomic::hip_atomic;
+
+  RAJA::forall<EXEC_POL4>(array_range, [=] RAJA_DEVICE(int i) {
+
+      RAJA::atomic::atomicAdd<ATOMIC_POL4>(&d_bins[d_array[i]], 1);
+
+    });
+
+  hipErrchk(hipMemcpy( bins, d_bins, M * sizeof(int), hipMemcpyDeviceToHost ));
+
+  printBins(bins, M);
+
+//----------------------------------------------------------------------------//
+
+  std::cout << "\n\nRunning RAJA HIP binning with auto atomic" << std::endl;
+  std::memset(bins, 0, M * sizeof(int));
+  hipErrchk(hipMemcpy( d_bins, bins, M * sizeof(int), hipMemcpyHostToDevice ));
+
+  using ATOMIC_POL5 = RAJA::atomic::auto_atomic;
+
+  RAJA::forall<EXEC_POL4>(array_range, [=] RAJA_DEVICE(int i) {
+
+      RAJA::atomic::atomicAdd<ATOMIC_POL5>(&d_bins[d_array[i]], 1);
+
+    });
+
+  hipErrchk(hipMemcpy( bins, d_bins, M * sizeof(int), hipMemcpyDeviceToHost ));
+
+  printBins(bins, M);
+
+  memoryManager::deallocate_gpu(d_array);
+  memoryManager::deallocate_gpu(d_bins);
+
+#endif
+//----------------------------------------------------------------------------//
 
   //
   // Clean up dellacate data

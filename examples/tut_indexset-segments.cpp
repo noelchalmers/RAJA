@@ -46,10 +46,10 @@
  */
 
 /*
-  CUDA_BLOCK_SIZE - specifies the number of threads in a CUDA thread block
+  BLOCK_SIZE - specifies the number of threads in a CUDA thread block
 */
-#if defined(RAJA_ENABLE_CUDA)
-const int CUDA_BLOCK_SIZE = 256;
+#if defined(RAJA_ENABLE_CUDA) || defined(RAJA_ENABLE_HIP)
+const int BLOCK_SIZE = 256;
 #endif
 
 //----------------------------------------------------------------------------//
@@ -318,7 +318,7 @@ int main(int RAJA_UNUSED_ARG(argc), char **RAJA_UNUSED_ARG(argv[]))
     " (sequential iteration over segments, CUDA parallel segment execution)...\n";
 
   using OMP_ISET_EXECPOL3 = RAJA::ExecPolicy<RAJA::seq_segit,
-                                             RAJA::cuda_exec<CUDA_BLOCK_SIZE>>;
+                                             RAJA::cuda_exec<BLOCK_SIZE>>;
 
   std::memcpy( a, a0, N * sizeof(double) );
 
@@ -328,6 +328,35 @@ int main(int RAJA_UNUSED_ARG(argc), char **RAJA_UNUSED_ARG(argv[]))
 
   checkResult(a, aref, N);
 //printResult(a, N);
+#endif
+
+//----------------------------------------------------------------------------//
+
+#if defined(RAJA_ENABLE_HIP)
+  std::cout <<
+    "\n Running RAJA index set (2 RangeSegments, 1 ListSegment) daxpy\n" <<
+    " (sequential iteration over segments, HIP parallel segment execution)...\n";
+
+  using OMP_ISET_EXECPOL3 = RAJA::ExecPolicy<RAJA::seq_segit,
+                                             RAJA::hip_exec<BLOCK_SIZE>>;
+
+  double* d_a = memoryManager::allocate_gpu<double>(N);
+  double* d_b = memoryManager::allocate_gpu<double>(N);
+
+  cudaErrchk(hipMemcpy( d_a, a0, N * sizeof(double), hipMemcpyHostToDevice ));
+  cudaErrchk(hipMemcpy( d_b,  b, N * sizeof(double), hipMemcpyHostToDevice ));
+
+  RAJA::forall<OMP_ISET_EXECPOL3>(is3, [=] RAJA_DEVICE (IdxType i) {
+    d_a[i] += d_b[i] * c;
+  });
+
+  cudaErrchk(hipMemcpy( a, d_a, N * sizeof(double), hipMemcpyDeviceToHost ));
+
+  checkResult(a, aref, N);
+//printResult(a, N);
+
+  memoryManager::deallocate_gpu(d_a);
+  memoryManager::deallocate_gpu(d_b);
 #endif
 
 //----------------------------------------------------------------------------//

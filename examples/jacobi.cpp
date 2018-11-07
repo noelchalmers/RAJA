@@ -72,10 +72,10 @@
  * CUDA_BLOCK_SIZE_Y - Number of threads in the
  *                     y-dimension of a cuda thread block
  * 
- * CUDA_BLOCK_SIZE   - Number of threads per threads block
+ * BLOCK_SIZE   - Number of threads per threads block
 */
-#if defined(RAJA_ENABLE_CUDA)
-const int CUDA_BLOCK_SIZE = 256;
+#if defined(RAJA_ENABLE_CUDA) || defined(RAJA_ENABLE_HIP)
+const int BLOCK_SIZE = 256;
 #endif
 
 
@@ -358,7 +358,7 @@ int main(int RAJA_UNUSED_ARG(argc), char **RAJA_UNUSED_ARG(argv[]))
     // Compute residual and update Iold
     //
     RAJA::ReduceSum<RAJA::cuda_reduce, double> RAJA_resI2(0.0);
-    RAJA::forall<RAJA::cuda_exec<CUDA_BLOCK_SIZE>>(
+    RAJA::forall<RAJA::cuda_exec<BLOCK_SIZE>>(
       gridRange, [=] RAJA_DEVICE (RAJA::Index_type k) {
       
           RAJA_resI2 += (I[k] - Iold[k]) * (I[k] - Iold[k]);
@@ -377,6 +377,92 @@ int main(int RAJA_UNUSED_ARG(argc), char **RAJA_UNUSED_ARG(argv[]))
   cudaDeviceSynchronize();
   computeErr(I, gridx);
   printf("No of iterations: %d \n \n", iteration);
+#endif
+
+#if defined(RAJA_ENABLE_HIP)
+  /*
+   *  HIP Jacobi Iteration.
+   *
+   *  ----[RAJA Policies]-----------
+   *  RAJA::cuda_threadblock_y_exec, RAJA::cuda_threadblock_x_exec -
+   *  define the mapping of loop iterations to GPU thread blocks
+   *
+   *  Note that HIP RAJA ReduceSum object performs the reduction
+   *  operation for the residual in a thread-safe manner on the GPU.
+   */
+
+  printf("RAJA: HIP Policy - Nested ForallN \n");
+
+  using jacobiHIPNestedPolicy = RAJA::KernelPolicy<
+    RAJA::statement::HipKernel<
+      RAJA::statement::For<1, RAJA::hip_threadblock_exec<32>,
+        RAJA::statement::For<0, RAJA::hip_threadblock_exec<32>,
+          RAJA::statement::Lambda<0>
+        >
+      >
+    > >;
+
+  resI2 = 1;
+  iteration = 0;
+  memset(I, 0, NN * sizeof(double));
+  memset(Iold, 0, NN * sizeof(double));
+
+  double *d_I    = memoryManager::allocate_gpu<double>(NN);
+  double *d_Iold = memoryManager::allocate_gpu<double>(NN);
+  hipErrchk(hipMemcpy( d_I, I, NN * sizeof(double), hipMemcpyHostToDevice ));
+  hipErrchk(hipMemcpy( d_Iold, Iold, NN * sizeof(double), hipMemcpyHostToDevice ));
+
+  double gridxo = gridx.o;
+  double gridxh = gridx.h;
+
+  while (resI2 > tol * tol) {
+
+    //
+    // Jacobi Iteration
+    //
+    RAJA::kernel<jacobiHIPNestedPolicy>(
+                         RAJA::make_tuple(jacobiRange,jacobiRange),
+                         [=] RAJA_DEVICE  (RAJA::Index_type m, RAJA::Index_type n) {
+
+          double x = gridxo + m * gridxh;
+          double y = gridxo + n * gridxh;
+
+          double f = gridxh * gridxh
+                     * (2 * x * (y - 1) * (y - 2 * x + x * y + 2) * exp(x - y));
+
+          int id = n * (N + 2) + m;
+          d_I[id] = 0.25 * (-f + d_Iold[id - N - 2] + d_Iold[id + N + 2] + d_Iold[id - 1]
+                             + d_Iold[id + 1]);
+        });
+
+    //
+    // Compute residual and update Iold
+    //
+    RAJA::ReduceSum<RAJA::hip_reduce, double> RAJA_resI2(0.0);
+    RAJA::forall<RAJA::hip_exec<BLOCK_SIZE>>(
+      gridRange, [=] RAJA_DEVICE (RAJA::Index_type k) {
+
+          RAJA_resI2 += (d_I[k] - d_Iold[k]) * (d_I[k] - d_Iold[k]);
+          d_Iold[k] = d_I[k];
+
+      });
+
+    resI2 = RAJA_resI2;
+
+    if (iteration > maxIter) {
+      printf("RAJA: HIP - Maxed out on iterations! \n");
+      exit(-1);
+    }
+    iteration++;
+  }
+  hipDeviceSynchronize();
+  hipErrchk(hipMemcpy( I, d_I, NN * sizeof(double), hipMemcpyDeviceToHost ));
+
+  computeErr(I, gridx);
+  printf("No of iterations: %d \n \n", iteration);
+
+  memoryManager::deallocate_gpu(d_I);
+  memoryManager::deallocate_gpu(d_Iold);
 #endif
 
   memoryManager::deallocate(I);

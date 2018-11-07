@@ -46,10 +46,10 @@
  */
 
 /*
-  CUDA_BLOCK_SIZE - specifies the number of threads in a CUDA thread block
+  BLOCK_SIZE - specifies the number of threads in a CUDA thread block
 */
-#if defined(RAJA_ENABLE_CUDA)
-const int CUDA_BLOCK_SIZE = 256;
+#if defined(RAJA_ENABLE_CUDA) || defined(RAJA_ENABLE_HIP)
+const int BLOCK_SIZE = 256;
 #endif
 
 //
@@ -300,7 +300,7 @@ int main(int RAJA_UNUSED_ARG(argc), char **RAJA_UNUSED_ARG(argv[]))
   std::memset(vertexvol, 0, N_vert*N_vert * sizeof(double));
 
   using EXEC_POL4 = RAJA::ExecPolicy<RAJA::seq_segit, 
-                                     RAJA::cuda_exec<CUDA_BLOCK_SIZE>>;
+                                     RAJA::cuda_exec<BLOCK_SIZE>>;
 
   RAJA::forall<EXEC_POL4>(colorset, [=] RAJA_DEVICE (int ie) {
     int* iv = &(elem2vert_map[4*ie]);
@@ -311,6 +311,47 @@ int main(int RAJA_UNUSED_ARG(argc), char **RAJA_UNUSED_ARG(argv[]))
   });
 
   checkResult(vertexvol, vertexvol_ref, N_vert);
+//std::cout << "\n Vertex volumes...\n";
+//printMeshData(vertexvol, N_vert, jvoff);
+#endif
+
+//----------------------------------------------------------------------------//
+
+#if defined(RAJA_ENABLE_HIP)
+//
+// RAJA vertex volume calculation - HIP IndexSet version
+// (sequential iteration over segments,
+//  HIP parallel execution of each segment)
+//
+  double* d_elemvol    = memoryManager::allocate_gpu<double>(N_elem*N_elem);
+  double* d_vertexvol  = memoryManager::allocate_gpu<double>(N_vert*N_vert);
+  int* d_elem2vert_map = memoryManager::allocate_gpu<int>(4*N_elem*N_elem);
+
+  hipMemcpy(d_elemvol, elemvol, N_elem*N_elem*sizeof(double), hipMemcpyHostToDevice);
+  hipMemcpy(d_elem2vert_map, elem2vert_map, 4*N_elem*N_elem*sizeof(int), hipMemcpyHostToDevice);
+
+  std::cout << "\n Running RAJA HIP index set version...\n";
+
+  std::memset(vertexvol, 0, N_vert*N_vert * sizeof(double));
+  hipMemcpy(d_vertexvol, vertexvol, N_vert*N_vert*sizeof(double), hipMemcpyHostToDevice);
+
+  using EXEC_POL4 = RAJA::ExecPolicy<RAJA::seq_segit,
+                                     RAJA::hip_exec<BLOCK_SIZE>>;
+
+  RAJA::forall<EXEC_POL4>(colorset, [=] RAJA_DEVICE (int ie) {
+    int* iv = &(d_elem2vert_map[4*ie]);
+    d_vertexvol[ iv[0] ] += d_elemvol[ie] / 4.0 ;
+    d_vertexvol[ iv[1] ] += d_elemvol[ie] / 4.0 ;
+    d_vertexvol[ iv[2] ] += d_elemvol[ie] / 4.0 ;
+    d_vertexvol[ iv[3] ] += d_elemvol[ie] / 4.0 ;
+  });
+
+  hipMemcpy(vertexvol, d_vertexvol, N_vert*N_vert*sizeof(double), hipMemcpyDeviceToHost);
+  checkResult(vertexvol, vertexvol_ref, N_vert);
+
+  memoryManager::deallocate_gpu(d_elemvol);
+  memoryManager::deallocate_gpu(d_vertexvol);
+  memoryManager::deallocate_gpu(d_elem2vert_map);
 //std::cout << "\n Vertex volumes...\n";
 //printMeshData(vertexvol, N_vert, jvoff);
 #endif

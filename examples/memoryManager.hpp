@@ -20,6 +20,8 @@
 
 #if defined(RAJA_ENABLE_CUDA)
 #include "RAJA/policy/cuda/raja_cudaerrchk.hpp"
+#elif defined(RAJA_ENABLE_HIP)
+#include "RAJA/policy/hip/raja_hiperrchk.hpp"
 #endif
 
 /*
@@ -56,6 +58,25 @@ void deallocate(T *&ptr)
     ptr = nullptr;
   }
 }
+
+#if defined(RAJA_ENABLE_HIP)
+  template <typename T>
+  T *allocate_gpu(RAJA::Index_type size)
+  {
+    T *ptr;
+    hipMalloc((void **)&ptr, sizeof(T) * size);
+    return ptr;
+  }
+
+  template <typename T>
+  void deallocate_gpu(T *&ptr)
+  {
+    if (ptr) {
+      hipFree(ptr);
+      ptr = nullptr;
+    }
+  }
+#endif
 
 };  // namespace memoryManager
 #endif

@@ -40,17 +40,17 @@ TEST(CampTuple, Assign)
   ASSERT_EQ(camp::get<1>(t2), 'a');
 }
 
-TEST(CampTuple, ForwardAsTuple)
-{
-  int a, b;
-  [](camp::tuple<int &, int &, int &&> t) {
-    ASSERT_EQ(camp::get<2>(t), 5);
-    camp::get<1>(t) = 3;
-    camp::get<2>(t) = 3;
-    ASSERT_EQ(camp::get<1>(t), 3);
-    ASSERT_EQ(camp::get<2>(t), 3);
-  }(camp::forward_as_tuple(a, b, int{5}));
-}
+// TEST(CampTuple, ForwardAsTuple)
+// {
+//   int a, b;
+//   [](camp::tuple<int &, int &, int &&> t) {
+//     ASSERT_EQ(camp::get<2>(t), 5);
+//     camp::get<1>(t) = 3;
+//     camp::get<2>(t) = 3;
+//     ASSERT_EQ(camp::get<1>(t), 3);
+//     ASSERT_EQ(camp::get<2>(t), 3);
+//   }(camp::forward_as_tuple(a, b, int{5}));
+// }
 
 TEST(CampTuple, GetByIndex)
 {

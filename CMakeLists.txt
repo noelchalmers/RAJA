@@ -38,6 +38,7 @@ if (NOT RAJA_LOADED)
   # Build options
   set(ENABLE_OPENMP On CACHE Bool "Build OpenMP support")
   set(ENABLE_CUDA Off CACHE Bool "Build CUDA support")
+  set(ENABLE_HIP Off CACHE Bool "Build HIP support")
   set(ENABLE_COPY_HEADERS Off CACHE Bool "")
   set(ENABLE_WARNINGS_AS_ERRORS Off CACHE Bool "")
 
@@ -94,7 +95,8 @@ if (NOT RAJA_LOADED)
     src/AlignedRangeIndexSetBuilders.cpp
     src/DepGraphNode.cpp
     src/LockFreeIndexSetBuilders.cpp
-    src/MemUtils_CUDA.cpp)
+    src/MemUtils_CUDA.cpp
+    src/MemUtils_HIP.cpp)
 
   set (raja_depends)
 
@@ -111,6 +113,12 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel" AND CMAKE_CXX_COMPILER_VERSION V
     set (raja_depends
       ${raja_depends}
       cuda)
+  endif ()
+
+  if (ENABLE_HIP)
+    set (raja_depends
+      ${raja_depends}
+      hip)
   endif ()
 
   if (ENABLE_CHAI)
