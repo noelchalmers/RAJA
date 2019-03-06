@@ -22,6 +22,9 @@
 // For details about use and distribution, please read RAJA/LICENSE.
 //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+//////////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+//////////////////////////////////////////////////////////////////////////////
 
 #ifndef RAJA_POLICYBASE_HPP
 #define RAJA_POLICYBASE_HPP
@@ -41,6 +44,7 @@ enum class Policy {
   openmp,
   target_openmp,
   cuda,
+  hip,
   tbb
 };
 
@@ -55,7 +59,7 @@ enum class Pattern {
 
 enum class Launch { undefined, sync, async };
 
-enum class Platform { undefined = 0, host = 1, cuda = 2, omp_target = 4 };
+enum class Platform { undefined = 0, host = 1, cuda = 2, omp_target = 4, hip = 8 };
 
 struct PolicyBase {
 };
@@ -181,6 +185,9 @@ struct is_target_openmp_policy
 };
 template <typename Pol>
 struct is_cuda_policy : RAJA::policy_is<Pol, RAJA::Policy::cuda> {
+};
+template <typename Pol>
+struct is_hip_policy : RAJA::policy_is<Pol, RAJA::Policy::hip> {
 };
 
 DefineTypeTraitFromConcept(is_execution_policy,

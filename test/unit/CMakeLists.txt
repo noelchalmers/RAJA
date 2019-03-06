@@ -13,6 +13,9 @@
 # For details about use and distribution, please read RAJA/LICENSE.
 #
 ###############################################################################
+###############################################################################
+# Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+###############################################################################
 
 raja_add_test(
   NAME camp_tuple
@@ -79,6 +82,10 @@ add_subdirectory(cpu)
 if(ENABLE_CUDA)
   add_subdirectory(cuda)
 endif(ENABLE_CUDA)
+
+if(ENABLE_HIP)
+  add_subdirectory(hip)
+endif(ENABLE_HIP)
 
 if(ENABLE_TARGET_OPENMP)
   add_subdirectory(omp-target)

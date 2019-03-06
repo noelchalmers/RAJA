@@ -12,6 +12,9 @@
 # For details about use and distribution, please read RAJA/LICENSE.
 #
 ###############################################################################
+###############################################################################
+# Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+###############################################################################
 
 cmake_policy(SET CMP0048 NEW)
 
@@ -27,7 +30,7 @@ endif()
 if (NOT RAJA_LOADED)
   set (RAJA_LOADED "${RAJA_VERSION_MAJOR}.${RAJA_VERSION_MINOR}.${RAJA_VERSION_PATCHLEVEL}")
 
-  # Promote RAJA_LOADED to PARENT_SCOPE if it exists, which is only if we are bringing	
+  # Promote RAJA_LOADED to PARENT_SCOPE if it exists, which is only if we are bringing
   # in RAJA as a subproject to a larger CMake project
   get_directory_property(hasParent PARENT_DIRECTORY)
   if(hasParent)
@@ -45,6 +48,7 @@ if (NOT RAJA_LOADED)
   # Build options
   set(ENABLE_OPENMP On CACHE Bool "Build OpenMP support")
   set(ENABLE_CUDA Off CACHE Bool "Build CUDA support")
+  set(ENABLE_HIP Off CACHE Bool "Build HIP support")
   set(ENABLE_COPY_HEADERS Off CACHE Bool "")
   set(ENABLE_WARNINGS_AS_ERRORS Off CACHE Bool "")
 
@@ -109,7 +113,8 @@ endif ()
     src/AlignedRangeIndexSetBuilders.cpp
     src/DepGraphNode.cpp
     src/LockFreeIndexSetBuilders.cpp
-    src/MemUtils_CUDA.cpp)
+    src/MemUtils_CUDA.cpp
+    src/MemUtils_HIP.cpp)
 
   set (raja_depends)
 
@@ -126,6 +131,12 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel" AND CMAKE_CXX_COMPILER_VERSION V
     set (raja_depends
       ${raja_depends}
       cuda)
+  endif ()
+
+  if (ENABLE_HIP)
+    set (raja_depends
+      ${raja_depends}
+      hip)
   endif ()
 
   if (ENABLE_CHAI)
@@ -160,10 +171,12 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel" AND CMAKE_CXX_COMPILER_VERSION V
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tpl/cub>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tpl/rocPRIM/rocprim/include>
     $<INSTALL_INTERFACE:include>)
 
   install(DIRECTORY include/ DESTINATION include FILES_MATCHING PATTERN *.hpp)
   install(DIRECTORY tpl/cub/ DESTINATION include FILES_MATCHING PATTERN *.cuh)
+  install(DIRECTORY tpl/rocPRIM/rocprim/include DESTINATION include FILES_MATCHING PATTERN *.cuh)
 
   install(FILES
     ${PROJECT_BINARY_DIR}/include/RAJA/config.hpp

@@ -22,6 +22,9 @@
 // For details about use and distribution, please read RAJA/LICENSE.
 //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+//////////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+//////////////////////////////////////////////////////////////////////////////
 
 #ifndef RAJA_INTERNAL_MACROS_HPP
 #define RAJA_INTERNAL_MACROS_HPP
@@ -31,12 +34,18 @@
 #include <cstdlib>
 #include <stdexcept>
 
+#if defined(RAJA_ENABLE_HIP)
+#include <hip/hip_runtime.h>
+#endif
+
 //
 // Macros for decorating host/device functions for CUDA kernels.
 // We need a better solution than this as it is a pain to manage
 // this stuff in an application.
 //
 #if defined(RAJA_ENABLE_CUDA) && defined(__CUDA_ARCH__)
+#define RAJA_DEVICE_CODE
+#elif defined(RAJA_ENABLE_HIP) && defined(__HIP_DEVICE_COMPILE__)
 #define RAJA_DEVICE_CODE
 #endif
 
@@ -53,6 +62,11 @@
 #define RAJA_SUPPRESS_HD_WARN _Pragma("nv_exec_check_disable")
 #endif
 #endif
+
+#elif defined(RAJA_ENABLE_HIP) && defined(__HIPCC__)
+#define RAJA_HOST_DEVICE __host__ __device__
+#define RAJA_DEVICE __device__
+#define RAJA_SUPPRESS_HD_WARN
 
 #else
 

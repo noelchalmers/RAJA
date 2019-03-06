@@ -23,6 +23,9 @@
 // For details about use and distribution, please read RAJA/LICENSE.
 //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+//////////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+//////////////////////////////////////////////////////////////////////////////
 
 #ifndef RAJA_PERMUTEDLAYOUT_HPP
 #define RAJA_PERMUTEDLAYOUT_HPP
@@ -90,7 +93,15 @@ auto make_permuted_layout(std::array<IdxLin, Rank> sizes,
   }
 
 
-  return Layout<Rank, IdxLin>(sizes, strides);
+  // return Layout<Rank, IdxLin>(sizes, strides);
+  auto ret  = Layout<Rank, IdxLin>();
+  for (size_t i = 0; i < Rank; ++i) {
+    ret.sizes[i] = sizes[i];
+    ret.strides[i] = strides[i];
+    ret.inv_strides[i] = strides[i] ? strides[i] : 1;
+    ret.inv_mods[i] = sizes[i] ? sizes[i] : 1;
+  }
+  return ret;
 }
 
 

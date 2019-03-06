@@ -12,6 +12,9 @@
 // For details about use and distribution, please read RAJA/LICENSE.
 //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+//////////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+//////////////////////////////////////////////////////////////////////////////
 
 ///
 /// Source file containing tests for CHAI with basic RAJA constructs
@@ -24,7 +27,7 @@
 
 #include <iostream>
 
-CUDA_TEST(ChaiTest, Simple)
+TEST(ChaiTest, Simple)
 {
   chai::ManagedArray<float> v1(10);
   chai::ManagedArray<float> v2(10);
@@ -38,6 +41,10 @@ CUDA_TEST(ChaiTest, Simple)
 
 #if defined(RAJA_ENABLE_CUDA)
   RAJA::forall<RAJA::cuda_exec<16> >(0, 10, [=] __device__(int i) {
+    v2[i] = v1[i] * 2.0f;
+  });
+#elif defined(RAJA_ENABLE_HIP)
+  RAJA::forall<RAJA::hip_exec<16> >(0, 10, [=] __device__(int i) {
     v2[i] = v1[i] * 2.0f;
   });
 #else
@@ -55,6 +62,10 @@ CUDA_TEST(ChaiTest, Simple)
   RAJA::forall<RAJA::cuda_exec<16> >(0, 10, [=] __device__(int i) {
     v2[i] *= 2.0f;
   });
+#if defined(RAJA_ENABLE_HIP)
+  RAJA::forall<RAJA::hip_exec<16> >(0, 10, [=] __device__(int i) {
+    v2[i] *= 2.0f;
+  });
 #else
   RAJA::forall<RAJA::omp_for_exec>(0, 10, [=](int i) { v2[i] *= 2.0f; });
 #endif
@@ -66,7 +77,7 @@ CUDA_TEST(ChaiTest, Simple)
   }
 }
 
-CUDA_TEST(ChaiTest, Views)
+TEST(ChaiTest, Views)
 {
   chai::ManagedArray<float> v1_array(10);
   chai::ManagedArray<float> v2_array(10);
@@ -84,6 +95,10 @@ CUDA_TEST(ChaiTest, Views)
   RAJA::forall<RAJA::cuda_exec<16> >(0, 10, [=] __device__(int i) {
     v2(i) = v1(i) * 2.0f;
   });
+#elif defined(RAJA_ENABLE_HIP)
+  RAJA::forall<RAJA::hip_exec<16> >(0, 10, [=] __device__(int i) {
+    v2(i) = v1(i) * 2.0f;
+  });
 #else
   RAJA::forall<RAJA::omp_for_exec>(0, 10, [=](int i) { v2(i) = v1(i) * 2.0f; });
 #endif
@@ -97,6 +112,10 @@ CUDA_TEST(ChaiTest, Views)
   RAJA::forall<RAJA::cuda_exec<16> >(0, 10, [=] __device__(int i) {
     v2(i) *= 2.0f;
   });
+#if defined(RAJA_ENABLE_HIP)
+  RAJA::forall<RAJA::hip_exec<16> >(0, 10, [=] __device__(int i) {
+    v2(i) *= 2.0f;
+  });
 #else
   RAJA::forall<RAJA::omp_for_exec>(0, 10, [=](int i) { v2(i) *= 2.0f; });
 #endif
@@ -107,3 +126,4 @@ CUDA_TEST(ChaiTest, Views)
     ;
   }
 }
+

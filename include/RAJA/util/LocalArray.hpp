@@ -23,7 +23,9 @@
 // For details about use and distribution, please read RAJA/LICENSE.
 //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
-
+//////////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+//////////////////////////////////////////////////////////////////////////////
 
 #ifndef RAJA_util_LocalArray_HPP
 #define RAJA_util_LocalArray_HPP
@@ -42,6 +44,8 @@ namespace RAJA
 struct cpu_tile_mem;
 struct cuda_thread_mem;
 struct cuda_shared_mem;
+struct hip_thread_mem;
+struct hip_shared_mem;
 
 template<camp::idx_t ... Sizes>
 using ParamList = camp::idx_seq<Sizes...>;

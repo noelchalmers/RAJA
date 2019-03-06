@@ -30,6 +30,9 @@
 // For details about use and distribution, please read RAJA/LICENSE.
 //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+//////////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+//////////////////////////////////////////////////////////////////////////////
 
 #ifndef RAJA_HPP
 #define RAJA_HPP
@@ -72,6 +75,10 @@
 
 #if defined(RAJA_ENABLE_CUDA)
 #include "RAJA/policy/cuda.hpp"
+#endif
+
+#if defined(RAJA_ENABLE_HIP)
+#include "RAJA/policy/hip.hpp"
 #endif
 
 #if defined(RAJA_ENABLE_OPENMP)

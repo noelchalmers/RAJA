@@ -13,6 +13,9 @@
 # For details about use and distribution, please read RAJA/LICENSE.
 #
 ###############################################################################
+###############################################################################
+# Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+###############################################################################
 
 raja_add_executable(
   NAME tut_daxpy
@@ -45,7 +48,7 @@ raja_add_executable(
 raja_add_executable(
   NAME tut_reductions
   SOURCES tut_reductions.cpp)
-  
+
 raja_add_executable(
   NAME tut_scan
   SOURCES tut_scan.cpp)
@@ -85,7 +88,7 @@ raja_add_executable(
 raja_add_executable(
   NAME wave-eqn
   SOURCES wave-eqn.cpp)
-  
+
 raja_add_executable(
   NAME ltimes
   SOURCES ltimes.cpp)

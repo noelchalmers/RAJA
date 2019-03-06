@@ -1,16 +1,19 @@
 ###############################################################################
 # Copyright (c) 2016-19, Lawrence Livermore National Security, LLC.
-#    
+#
 # Produced at the Lawrence Livermore National Laboratory
-#    
+#
 # LLNL-CODE-689114
-# 
+#
 # All rights reserved.
-#  
+#
 # This file is part of RAJA.
 #
 # For details about use and distribution, please read RAJA/LICENSE.
 #
+###############################################################################
+###############################################################################
+# Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
 ###############################################################################
 
 ## Floating point options
@@ -67,6 +70,7 @@ set(RAJA_ENABLE_TARGET_OPENMP ${ENABLE_TARGET_OPENMP})
 set(RAJA_ENABLE_TBB ${ENABLE_TBB})
 set(RAJA_ENABLE_CUDA ${ENABLE_CUDA})
 set(RAJA_ENABLE_CLANG_CUDA ${ENABLE_CLANG_CUDA})
+set(RAJA_ENABLE_HIP ${ENABLE_HIP})
 set(RAJA_ENABLE_CHAI ${ENABLE_CHAI})
 set(RAJA_ENABLE_CUB ${ENABLE_CUB})
 

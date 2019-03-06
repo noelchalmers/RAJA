@@ -27,7 +27,7 @@
  *  Scan Example
  *
  *  Example shows how to perform RAJA inclusive and exclusive scan operations
- *  for integer arrays, including in-place, using different operators. 
+ *  for integer arrays, including in-place, using different operators.
  *  Other array data types, operators, etc. are similar
  *
  *  RAJA features shown:
@@ -44,6 +44,10 @@
 */
 #if defined(RAJA_ENABLE_CUDA)
 const int CUDA_BLOCK_SIZE = 16;
+#endif
+
+#if defined(RAJA_ENABLE_HIP)
+const int HIP_BLOCK_SIZE = 16;
 #endif
 
 //
@@ -72,14 +76,14 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
 //
 // Allocate and array vector data
 //
-  int* in = memoryManager::allocate<int>(N); 
-  int* out = memoryManager::allocate<int>(N); 
+  int* in = memoryManager::allocate<int>(N);
+  int* out = memoryManager::allocate<int>(N);
 
   std::iota(in, in+N, -1);
 
   std::shuffle(in, in + N, std::mt19937{std::random_device{}()});
   std::cout << "\n in values...\n";
-  printArray(in, N);  
+  printArray(in, N);
   std::cout << "\n";
 
 
@@ -93,7 +97,7 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
   RAJA::inclusive_scan<RAJA::seq_exec>(in, in + N, out);
 
   checkInclusiveScanResult<RAJA::operators::plus<int>>(in, out, N);
-  printArray(out, N);  
+  printArray(out, N);
   std::cout << "\n";
 
 //----------------------------------------------------------------------------//
@@ -104,7 +108,7 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
                                        RAJA::operators::plus<int>{});
 
   checkInclusiveScanResult<RAJA::operators::plus<int>>(in, out, N);
-  printArray(out, N);  
+  printArray(out, N);
   std::cout << "\n";
 
 //----------------------------------------------------------------------------//
@@ -115,7 +119,7 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
                                        RAJA::operators::plus<int>{});
 
   checkExclusiveScanResult<RAJA::operators::plus<int>>(in, out, N);
-  printArray(out, N);  
+  printArray(out, N);
   std::cout << "\n";
 
 //----------------------------------------------------------------------------//
@@ -205,6 +209,49 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
 
 #endif
 
+#if defined(RAJA_ENABLE_HIP)
+
+//----------------------------------------------------------------------------//
+// Perform a couple of HIP scans...
+//----------------------------------------------------------------------------//
+
+  std::cout << "\n Running HIP inclusive_scan_inplace (plus)...\n";
+
+  std::copy_n(in, N, out);
+  int* d_in = memoryManager::allocate_gpu<int>(N);
+  int* d_out = memoryManager::allocate_gpu<int>(N);
+
+  hipErrchk(hipMemcpy( d_out, out, N * sizeof(int), hipMemcpyHostToDevice ));
+
+  RAJA::inclusive_scan_inplace<RAJA::hip_exec<HIP_BLOCK_SIZE>>(d_out, d_out + N,
+                                       RAJA::operators::plus<int>{});
+
+  hipErrchk(hipMemcpy( out, d_out, N * sizeof(int), hipMemcpyDeviceToHost ));
+
+  checkInclusiveScanResult<RAJA::operators::plus<int>>(in, out, N);
+  printArray(out, N);
+  std::cout << "\n";
+
+//----------------------------------------------------------------------------//
+
+  hipErrchk(hipMemcpy( d_in, in, N * sizeof(int), hipMemcpyHostToDevice ));
+  hipErrchk(hipMemcpy( d_out, out, N * sizeof(int), hipMemcpyHostToDevice ));
+
+  std::cout << "\n Running HIP exclusive_scan (plus)...\n";
+  RAJA::exclusive_scan<RAJA::hip_exec<HIP_BLOCK_SIZE>>(d_in, d_in + N, d_out,
+                                       RAJA::operators::plus<int>{});
+
+  hipErrchk(hipMemcpy( out, d_out, N * sizeof(int), hipMemcpyDeviceToHost ));
+
+  checkExclusiveScanResult<RAJA::operators::plus<int>>(in, out, N);
+  printArray(out, N);
+  std::cout << "\n";
+
+  memoryManager::deallocate_gpu(d_in);
+  memoryManager::deallocate_gpu(d_out);
+
+#endif
+
 //----------------------------------------------------------------------------//
 
 //
@@ -230,7 +277,7 @@ void checkInclusiveScanResult(const T* in, const T* out, int N)
     val = Function()(val, in[i]);
     if (out[i] != val) {
       std::cout << "\n\t result -- WRONG\n";
-      std::cout << "\t" << out[i] << " != " << val 
+      std::cout << "\t" << out[i] << " != " << val
                 << " (at index " << i << ")\n";
     }
   }
@@ -247,7 +294,7 @@ void checkExclusiveScanResult(const T* in, const T* out, int N)
   for (int i = 0; i < N; ++i) {
     if (out[i] != val) {
       std::cout << "\n\t result -- WRONG\n";
-      std::cout << "\t" << out[i] << " != " << val 
+      std::cout << "\t" << out[i] << " != " << val
                 << " (at index " << i << ")\n";
     }
     val = Function()(val, in[i]);

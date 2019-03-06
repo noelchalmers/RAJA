@@ -12,6 +12,9 @@
 // For details about use and distribution, please read RAJA/LICENSE.
 //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+//////////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+//////////////////////////////////////////////////////////////////////////////
 
 ///
 /// Source file containing tests for CHAI with different RAJA policies
@@ -48,14 +51,25 @@ static_assert(
     "");
 #endif
 
+#if defined(RAJA_ENABLE_HIP)
+static_assert(RAJA::detail::get_space<RAJA::hip_exec<128>>::value == chai::GPU,
+              "");
+#endif
+
+#if defined(RAJA_ENABLE_HIP)
+static_assert(
+    RAJA::detail::get_space<
+        RAJA::ExecPolicy<RAJA::seq_segit, RAJA::hip_exec<128>>>::value ==
+        chai::GPU,
+    "");
+#endif
+
 static_assert(RAJA::detail::get_space<RAJA::KernelPolicy<
                       RAJA::statement::For<0, RAJA::seq_exec, RAJA::statement::Lambda<0>>>>::value ==
                   chai::CPU,
               "");
 
 #if defined(RAJA_ENABLE_CUDA)
-
-
 static_assert(
     RAJA::detail::get_space<
         RAJA::KernelPolicy<RAJA::statement::For<0, RAJA::seq_exec>>>::value ==
@@ -67,6 +81,17 @@ static_assert(
     "");
 #endif
 
+#if defined(RAJA_ENABLE_HIP)
+static_assert(
+    RAJA::detail::get_space<
+        RAJA::KernelPolicy<RAJA::statement::For<0, RAJA::seq_exec>>>::value ==
+        chai::CPU,
+    "");
+static_assert(
+    RAJA::detail::get_space<RAJA::KernelPolicy<RAJA::statement::HipKernel<
+            RAJA::statement::For<0, RAJA::seq_exec>>>>::value == chai::GPU,
+    "");
+#endif
 
 TEST(ChaiPolicyTest, Default)
 {
@@ -74,6 +99,11 @@ TEST(ChaiPolicyTest, Default)
   std::cout
       << RAJA::detail::get_space<
              RAJA::ExecPolicy<RAJA::seq_segit, RAJA::cuda_exec<128>>>::value
+      << std::endl;
+#if defined(RAJA_ENABLE_HIP)
+  std::cout
+      << RAJA::detail::get_space<
+             RAJA::ExecPolicy<RAJA::seq_segit, RAJA::hip_exec<128>>>::value
       << std::endl;
 #else
   std::cout << RAJA::detail::get_space<

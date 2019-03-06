@@ -13,12 +13,15 @@
 # For details about use and distribution, please read RAJA/LICENSE.
 #
 ###############################################################################
+###############################################################################
+# Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+###############################################################################
 
-if (ENABLE_CUDA)
+if (ENABLE_CUDA OR ENABLE_HIP)
   raja_add_test(
     NAME test-chai-nested
     SOURCES chai-nested.cpp)
-endif(ENABLE_CUDA)
+endif(ENABLE_CUDA OR ENABLE_HIP)
 
 raja_add_test(
   NAME test-chai-policy

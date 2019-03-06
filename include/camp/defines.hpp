@@ -1,8 +1,16 @@
+//////////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+//////////////////////////////////////////////////////////////////////////////
+
 #ifndef CAMP_DEFINES_HPP
 #define CAMP_DEFINES_HPP
 
 #include <cstddef>
 #include <cstdint>
+
+#ifdef __HIPCC__
+#include <hip/hip_runtime.h>
+#endif
 
 namespace camp
 {
@@ -43,6 +51,21 @@ namespace camp
 #else
 #define CAMP_SUPPRESS_HD_WARN
 #endif
+
+// #elif defined(__HIPCC__)
+// #define CAMP_DEVICE __device__
+// #define CAMP_HOST_DEVICE __host__ __device__
+// #define CAMP_SUPPRESS_HD_WARN
+
+#elif defined(__HIPCC__) && defined(__HIP_DEVICE_COMPILE__)
+#define CAMP_DEVICE __device__
+#define CAMP_HOST_DEVICE __host__ __device__
+#define CAMP_SUPPRESS_HD_WARN
+
+#elif defined(__HIPCC__)
+#define CAMP_DEVICE __device__
+#define CAMP_HOST_DEVICE
+#define CAMP_SUPPRESS_HD_WARN
 
 #else
 #define CAMP_DEVICE

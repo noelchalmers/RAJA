@@ -12,6 +12,9 @@
 // For details about use and distribution, please read RAJA/LICENSE.
 //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+//////////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+//////////////////////////////////////////////////////////////////////////////
 
 #ifndef EXAMPLES_MEMORYMANAGER_HPP
 #define EXAMPLES_MEMORYMANAGER_HPP
@@ -20,6 +23,10 @@
 
 #if defined(RAJA_ENABLE_CUDA)
 #include "RAJA/policy/cuda/raja_cudaerrchk.hpp"
+#endif
+
+#if defined(RAJA_ENABLE_HIP)
+#include "RAJA/policy/hip/raja_hiperrchk.hpp"
 #endif
 
 /*
@@ -56,6 +63,33 @@ void deallocate(T *&ptr)
     ptr = nullptr;
   }
 }
+
+#if defined(RAJA_ENABLE_CUDA) || defined(RAJA_ENABLE_HIP)
+  template <typename T>
+  T *allocate_gpu(RAJA::Index_type size)
+  {
+    T *ptr;
+#if defined(RAJA_ENABLE_CUDA)
+    cudaErrchk(cudaMalloc((void **)&ptr, sizeof(T) * size));
+#elif defined(RAJA_ENABLE_HIP)
+    hipErrchk(hipMalloc((void **)&ptr, sizeof(T) * size));
+#endif
+    return ptr;
+  }
+
+  template <typename T>
+  void deallocate_gpu(T *&ptr)
+  {
+    if (ptr) {
+#if defined(RAJA_ENABLE_CUDA)
+      cudaErrchk(cudaFree(ptr));
+#elif defined(RAJA_ENABLE_HIP)
+      hipErrchk(hipFree(ptr));
+#endif
+      ptr = nullptr;
+    }
+  }
+#endif
 
 };  // namespace memoryManager
 #endif

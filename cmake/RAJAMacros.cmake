@@ -12,6 +12,9 @@
 # For details about use and distribution, please read RAJA/LICENSE.
 #
 ###############################################################################
+###############################################################################
+# Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+###############################################################################
 
 macro(raja_add_executable)
   set(options )
@@ -33,6 +36,10 @@ macro(raja_add_executable)
 
   if (ENABLE_CUDA)
     list (APPEND arg_DEPENDS_ON cuda)
+  endif ()
+
+  if (ENABLE_HIP)
+    list (APPEND arg_DEPENDS_ON hip)
   endif ()
 
   if (ENABLE_TBB)

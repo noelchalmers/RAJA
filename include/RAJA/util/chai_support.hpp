@@ -23,6 +23,9 @@
 // For details about use and distribution, please read RAJA/LICENSE.
 //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+//////////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+//////////////////////////////////////////////////////////////////////////////
 
 #ifndef RAJA_DETAIL_RAJA_CHAI_HPP
 #define RAJA_DETAIL_RAJA_CHAI_HPP
@@ -68,6 +71,13 @@ struct get_space_from_platform<Platform::host> {
 #if defined(RAJA_ENABLE_CUDA)
 template <>
 struct get_space_from_platform<Platform::cuda> {
+  static constexpr chai::ExecutionSpace value = chai::GPU;
+};
+#endif
+
+#if defined(RAJA_ENABLE_HIP)
+template <>
+struct get_space_from_platform<Platform::hip> {
   static constexpr chai::ExecutionSpace value = chai::GPU;
 };
 #endif

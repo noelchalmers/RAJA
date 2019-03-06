@@ -22,6 +22,9 @@
 // For details about use and distribution, please read RAJA/LICENSE.
 //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+//////////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+//////////////////////////////////////////////////////////////////////////////
 
 #ifndef RAJA_policy_atomic_auto_HPP
 #define RAJA_policy_atomic_auto_HPP
@@ -47,6 +50,9 @@
 #if defined(__CUDA_ARCH__)
 #define RAJA_AUTO_ATOMIC \
   RAJA::atomic::cuda_atomic {}
+#elif defined(__HIP_DEVICE_COMPILE__)
+#define RAJA_AUTO_ATOMIC \
+  RAJA::atomic::hip_atomic {}
 #elif defined(RAJA_ENABLE_OPENMP)
 #define RAJA_AUTO_ATOMIC \
   RAJA::atomic::omp_atomic {}

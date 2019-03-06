@@ -12,6 +12,9 @@
 // For details about use and distribution, please read RAJA/LICENSE.
 //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+//////////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+//////////////////////////////////////////////////////////////////////////////
 
 ///
 /// Source file containing tests for atomic operations
@@ -85,7 +88,6 @@ void testAtomicFunctionBasic()
 #endif
 }
 
-
 template <typename ExecPolicy, typename AtomicPolicy>
 void testAtomicFunctionPol()
 {
@@ -99,6 +101,80 @@ void testAtomicFunctionPol()
   testAtomicFunctionBasic<ExecPolicy, AtomicPolicy, float, 10000>();
   testAtomicFunctionBasic<ExecPolicy, AtomicPolicy, double, 10000>();
 }
+
+/*GPU memory versions */
+#if defined(RAJA_ENABLE_HIP)
+
+template <typename ExecPolicy,
+          typename AtomicPolicy,
+          typename T,
+          RAJA::Index_type N>
+void testAtomicFunctionBasic_gpu()
+{
+  RAJA::RangeSegment seg(0, N);
+
+  // initialize an array
+  T *dest = new T[8];
+  T *d_dest = nullptr;
+  hipMalloc((void **)&d_dest, sizeof(T) * 8);
+
+  // use atomic add to reduce the array
+  dest[0] = (T)0;
+  dest[1] = (T)N;
+  dest[2] = (T)N;
+  dest[3] = (T)0;
+  dest[4] = (T)0;
+  dest[5] = (T)0;
+  dest[6] = (T)N + 1;
+  dest[7] = (T)0;
+
+  hipMemcpy(d_dest, dest, 8*sizeof(T), hipMemcpyHostToDevice);
+
+  RAJA::forall<ExecPolicy>(seg, [=] RAJA_HOST_DEVICE(RAJA::Index_type i) {
+    RAJA::atomic::atomicAdd<AtomicPolicy>(d_dest + 0, (T)1);
+    RAJA::atomic::atomicSub<AtomicPolicy>(d_dest + 1, (T)1);
+
+    RAJA::atomic::atomicMin<AtomicPolicy>(d_dest + 2, (T)i);
+    RAJA::atomic::atomicMax<AtomicPolicy>(d_dest + 3, (T)i);
+    RAJA::atomic::atomicInc<AtomicPolicy>(d_dest + 4);
+    RAJA::atomic::atomicInc<AtomicPolicy>(d_dest + 5, (T)16);
+    RAJA::atomic::atomicDec<AtomicPolicy>(d_dest + 6);
+    RAJA::atomic::atomicDec<AtomicPolicy>(d_dest + 7, (T)16);
+  });
+
+  hipDeviceSynchronize();
+
+  hipMemcpy(dest, d_dest, 8*sizeof(T), hipMemcpyDeviceToHost);
+
+  EXPECT_EQ((T)N, dest[0]);
+  EXPECT_EQ((T)0, dest[1]);
+  EXPECT_EQ((T)0, dest[2]);
+  EXPECT_EQ((T)N - 1, dest[3]);
+  EXPECT_EQ((T)N, dest[4]);
+  EXPECT_EQ((T)4, dest[5]);
+  EXPECT_EQ((T)1, dest[6]);
+  EXPECT_EQ((T)13, dest[7]);
+
+
+  delete[] dest;
+  hipFree(d_dest);
+}
+
+template <typename ExecPolicy, typename AtomicPolicy>
+void testAtomicFunctionPol_gpu()
+{
+  testAtomicFunctionBasic_gpu<ExecPolicy, AtomicPolicy, int, 10000>();
+  testAtomicFunctionBasic_gpu<ExecPolicy, AtomicPolicy, unsigned, 10000>();
+  testAtomicFunctionBasic_gpu<ExecPolicy, AtomicPolicy, long long, 10000>();
+  testAtomicFunctionBasic_gpu<ExecPolicy,
+                          AtomicPolicy,
+                          unsigned long long,
+                          10000>();
+  testAtomicFunctionBasic_gpu<ExecPolicy, AtomicPolicy, float, 10000>();
+  testAtomicFunctionBasic_gpu<ExecPolicy, AtomicPolicy, double, 10000>();
+}
+#endif //defined(RAJA_ENABLE_HIP)
+
 
 template < typename T, typename AtomicPolicy >
 struct PreIncCountOp {
@@ -529,6 +605,8 @@ void testAtomicRefCount(RAJA::RangeSegment seg,
   });
 #if defined(RAJA_ENABLE_CUDA)
   cudaDeviceSynchronize();
+#elif defined(RAJA_ENABLE_HIP)
+  hipDeviceSynchronize();
 #endif
   EXPECT_EQ(countop.final, count[0]);
   for (RAJA::Index_type i = 0; i < seg.size(); i++) {
@@ -848,6 +926,748 @@ void testAtomicLogicalPol()
   testAtomicLogical<ExecPolicy, AtomicPolicy, unsigned long long, 100000>();
 }
 
+#if defined(RAJA_ENABLE_HIP)
+
+template < typename T, typename AtomicPolicy >
+struct PreIncCountOp_gpu {
+  PreIncCountOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : counter(d_count), min((T)0), max((T)seg.size()-(T)1), final((T)seg.size())
+  {
+    count[0] = (T)0;
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type RAJA_UNUSED_ARG(i)) const {
+    return (++counter) - (T)1;
+  }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> counter;
+  T min, max, final;
+};
+
+template < typename T, typename AtomicPolicy >
+struct PostIncCountOp_gpu {
+  PostIncCountOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : counter(d_count), min((T)0), max((T)seg.size()-(T)1), final((T)seg.size())
+  {
+    count[0] = (T)0;
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type RAJA_UNUSED_ARG(i)) const {
+    return (counter++);
+  }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> counter;
+  T min, max, final;
+};
+
+template < typename T, typename AtomicPolicy >
+struct AddEqCountOp_gpu {
+  AddEqCountOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : counter(d_count), min((T)0), max((T)seg.size()-(T)1), final((T)seg.size())
+  {
+    count[0] = (T)0;
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type RAJA_UNUSED_ARG(i)) const {
+    return (counter += (T)1) - (T)1;
+  }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> counter;
+  T min, max, final;
+};
+
+template < typename T, typename AtomicPolicy >
+struct FetchAddCountOp_gpu {
+  FetchAddCountOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : counter(d_count), min((T)0), max((T)seg.size()-(T)1), final((T)seg.size())
+  {
+    count[0] = (T)0;
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type RAJA_UNUSED_ARG(i)) const {
+    return counter.fetch_add((T)1);
+  }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> counter;
+  T min, max, final;
+};
+
+template < typename T, typename AtomicPolicy >
+struct PreDecCountOp_gpu {
+  PreDecCountOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : counter(d_count), min((T)0), max((T)seg.size()-(T)1), final((T)0)
+  {
+    count[0] = (T)seg.size();
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type RAJA_UNUSED_ARG(i)) const {
+    return (--counter);
+  }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> counter;
+  T min, max, final;
+};
+
+template < typename T, typename AtomicPolicy >
+struct PostDecCountOp_gpu {
+  PostDecCountOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : counter(d_count), min((T)0), max((T)seg.size()-(T)1), final((T)0)
+  {
+    count[0] = (T)seg.size();
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type RAJA_UNUSED_ARG(i)) const {
+    return (counter--) - (T)1;
+  }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> counter;
+  T min, max, final;
+};
+
+template < typename T, typename AtomicPolicy >
+struct SubEqCountOp_gpu {
+  SubEqCountOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : counter(d_count), min((T)0), max((T)seg.size()-(T)1), final((T)0)
+  {
+    count[0] = (T)seg.size();
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type RAJA_UNUSED_ARG(i)) const {
+    return (counter -= (T)1);
+  }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> counter;
+  T min, max, final;
+};
+
+template < typename T, typename AtomicPolicy >
+struct FetchSubCountOp_gpu {
+  FetchSubCountOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : counter(d_count), min((T)0), max((T)seg.size()-(T)1), final((T)0)
+  {
+    count[0] = (T)seg.size();
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type RAJA_UNUSED_ARG(i)) const {
+    return counter.fetch_sub((T)1) - (T)1;
+  }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> counter;
+  T min, max, final;
+};
+
+template < typename T, typename AtomicPolicy >
+struct MaxEqOtherOp_gpu {
+  MaxEqOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : other(d_count), min(T(0)), max((T)seg.size() - (T)1),
+      final_min(max), final_max(max)
+  {
+    count[0] = (T)0;
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type i) const
+  { return other.max((T)i); }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+template < typename T, typename AtomicPolicy >
+struct FetchMaxOtherOp_gpu {
+  FetchMaxOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : other(d_count), min(T(0)), max((T)seg.size() - (T)1),
+      final_min(max), final_max(max)
+  {
+    count[0] = (T)0;
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type i) const
+  { return other.fetch_max((T)i); }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+template < typename T, typename AtomicPolicy >
+struct MinEqOtherOp_gpu {
+  MinEqOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : other(d_count), min(T(0)), max((T)seg.size() - (T)1),
+      final_min(min), final_max(min)
+  {
+    count[0] = (T)seg.size();
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type i) const
+  { return other.min((T)i); }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+template < typename T, typename AtomicPolicy >
+struct FetchMinOtherOp_gpu {
+  FetchMinOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : other(d_count), min(T(0)), max((T)seg.size()),
+      final_min(min), final_max(min)
+  {
+    count[0] = (T)seg.size();
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type i) const
+  { return other.fetch_min((T)i); }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+
+
+template < typename T, typename AtomicPolicy >
+struct AndEqOtherOp_gpu {
+  AndEqOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : other(d_count), min(T(0)), max((T)seg.size()),
+      final_min(min), final_max(min)
+  {
+    count[0] = np2m1((T)seg.size());
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type i) const
+  { return other &= (T)i; }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+template < typename T, typename AtomicPolicy >
+struct FetchAndOtherOp_gpu {
+  FetchAndOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : other(d_count), min(T(0)), max(np2m1((T)seg.size())),
+      final_min(min), final_max(min)
+  {
+    count[0] = max;
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type i) const
+  { return other.fetch_and((T)i); }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+template < typename T, typename AtomicPolicy >
+struct OrEqOtherOp_gpu {
+  OrEqOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : other(d_count), min(T(0)), max(np2m1((T)seg.size())),
+      final_min(max), final_max(max)
+  {
+    count[0] = T(0);
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type i) const
+  { return other |= (T)i; }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+template < typename T, typename AtomicPolicy >
+struct FetchOrOtherOp_gpu {
+  FetchOrOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : other(d_count), min(T(0)), max(np2m1((T)seg.size())),
+      final_min(max), final_max(max)
+  {
+    count[0] = T(0);
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type i) const
+  { return other.fetch_or((T)i); }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+template < typename T, typename AtomicPolicy >
+struct XorEqOtherOp_gpu {
+  XorEqOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : other(d_count), min(T(0)), max(np2m1((T)seg.size())),
+      final_min(min), final_max(min)
+  {
+    count[0] = T(0);
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+    for (RAJA::Index_type i = 0; i < seg.size(); ++i) {
+      final_min ^= (T)i; final_max ^= (T)i;
+    }
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type i) const
+  { return other ^= (T)i; }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+template < typename T, typename AtomicPolicy >
+struct FetchXorOtherOp_gpu {
+  FetchXorOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : other(d_count), min(T(0)), max(np2m1((T)seg.size())),
+      final_min(min), final_max(min)
+  {
+    count[0] = T(0);
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+    for (RAJA::Index_type i = 0; i < seg.size(); ++i) {
+      final_min ^= (T)i; final_max ^= (T)i;
+    }
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type i) const
+  { return other.fetch_xor((T)i); }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+template < typename T, typename AtomicPolicy >
+struct LoadOtherOp_gpu {
+  LoadOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : other(d_count), min((T)seg.size()), max(min),
+      final_min(min), final_max(min)
+  {
+    count[0] = min;
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type RAJA_UNUSED_ARG(i)) const
+  { return other.load(); }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+template < typename T, typename AtomicPolicy >
+struct OperatorTOtherOp_gpu {
+  OperatorTOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment RAJA_UNUSED_ARG(seg))
+    : other(d_count), min(T(0)), max(min),
+      final_min(min), final_max(min)
+  {
+    count[0] = min;
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type RAJA_UNUSED_ARG(i)) const
+  { return other; }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+template < typename T, typename AtomicPolicy >
+struct StoreOtherOp_gpu {
+  StoreOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : other(d_count), min((T)0), max((T)seg.size() - (T)1),
+      final_min(min), final_max(max)
+  {
+    count[0] = (T)seg.size();
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type i) const
+  { other.store((T)i); return (T)i; }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+template < typename T, typename AtomicPolicy >
+struct AssignOtherOp_gpu {
+  AssignOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : other(d_count), min(T(0)), max((T)seg.size() - (T)1),
+      final_min(min), final_max(max)
+  {
+    count[0] = (T)seg.size();
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type i) const
+  { return (other = (T)i); }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+template < typename T, typename AtomicPolicy >
+struct CASOtherOp_gpu {
+  CASOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : other(d_count), min((T)0), max((T)seg.size() - (T)1),
+      final_min(min), final_max(max)
+  {
+    count[0] = (T)0;
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type i) const
+  {
+    T received, expect = (T)0;
+    while ((received = other.CAS(expect, (T)i)) != expect) {
+      expect = received;
+    }
+    return received;
+  }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+template < typename T, typename AtomicPolicy >
+struct CompareExchangeWeakOtherOp_gpu {
+  CompareExchangeWeakOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : other(d_count), min((T)0), max((T)seg.size() - (T)1),
+      final_min(min), final_max(max)
+  {
+    count[0] = (T)0;
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type i) const
+  {
+    T expect = (T)0;
+    while (!other.compare_exchange_weak(expect, (T)i)) {}
+    return expect;
+  }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+template < typename T, typename AtomicPolicy >
+struct CompareExchangeStrongOtherOp_gpu {
+  CompareExchangeStrongOtherOp_gpu(T* count, T* d_count, RAJA::RangeSegment seg)
+    : other(d_count), min((T)0), max((T)seg.size() - (T)1),
+      final_min(min), final_max(max)
+  {
+    count[0] = (T)0;
+    hipMemcpy(d_count, count, 1*sizeof(T), hipMemcpyHostToDevice);
+  }
+  RAJA_HOST_DEVICE
+  T operator()(RAJA::Index_type i) const
+  {
+    T expect = (T)0;
+    while (!other.compare_exchange_strong(expect, (T)i)) {}
+    return expect;
+  }
+  RAJA::atomic::AtomicRef<T, AtomicPolicy> other;
+  T min, max, final_min, final_max;
+};
+
+template <typename ExecPolicy,
+          typename AtomicPolicy,
+          typename T,
+          template <typename, typename> class CountOp>
+void testAtomicRefCount_gpu(RAJA::RangeSegment seg,
+                         T* count, T* d_count, T* list, T* d_list, bool* hit, bool* d_hit)
+{
+  CountOp<T, AtomicPolicy> countop(count, d_count, seg);
+  RAJA::forall<ExecPolicy>(seg, [=] RAJA_HOST_DEVICE(RAJA::Index_type i) {
+    d_list[i] = countop.max + (T)1;
+    d_hit[i] = false;
+  });
+  RAJA::forall<ExecPolicy>(seg, [=] RAJA_HOST_DEVICE(RAJA::Index_type i) {
+    T val = countop(i);
+    d_list[i] = val;
+    d_hit[(RAJA::Index_type)val] = true;
+  });
+  hipDeviceSynchronize();
+
+  hipMemcpy(count, d_count, 1*sizeof(T), hipMemcpyDeviceToHost);
+  hipMemcpy(list, d_list, seg.size()*sizeof(T), hipMemcpyDeviceToHost);
+  hipMemcpy(hit, d_hit, seg.size()*sizeof(bool), hipMemcpyDeviceToHost);
+
+  EXPECT_EQ(countop.final, count[0]);
+  for (RAJA::Index_type i = 0; i < seg.size(); i++) {
+    EXPECT_LE(countop.min, list[i]);
+    EXPECT_GE(countop.max, list[i]);
+    EXPECT_TRUE(hit[i]);
+  }
+}
+
+template <typename ExecPolicy,
+          typename AtomicPolicy,
+          typename T,
+          template <typename, typename> class OtherOp>
+void testAtomicRefOther_gpu(RAJA::RangeSegment seg, T* count, T* d_count, T* list, T* d_list)
+{
+  OtherOp<T, AtomicPolicy> otherop(count, d_count, seg);
+  RAJA::forall<ExecPolicy>(seg, [=] RAJA_HOST_DEVICE(RAJA::Index_type i) {
+    d_list[i] = otherop.max + (T)1;
+  });
+  RAJA::forall<ExecPolicy>(seg, [=] RAJA_HOST_DEVICE(RAJA::Index_type i) {
+    T val = otherop(i);
+    d_list[i] = val;
+  });
+  hipDeviceSynchronize();
+
+  hipMemcpy(count, d_count, 1*sizeof(T), hipMemcpyDeviceToHost);
+  hipMemcpy(list, d_list, seg.size()*sizeof(T), hipMemcpyDeviceToHost);
+
+  EXPECT_LE(otherop.final_min, count[0]);
+  EXPECT_GE(otherop.final_max, count[0]);
+  for (RAJA::Index_type i = 0; i < seg.size(); i++) {
+    EXPECT_LE(otherop.min, list[i]);
+    EXPECT_GE(otherop.max, list[i]);
+  }
+}
+
+template <typename ExecPolicy,
+          typename AtomicPolicy,
+          typename T,
+          RAJA::Index_type N>
+void testAtomicRefIntegral_gpu()
+{
+  RAJA::RangeSegment seg(0, N);
+
+  // initialize an array
+  T *count  = new T[1];
+  T *list   = new T[N];
+  bool *hit = new bool[N];
+  T *d_count = nullptr;
+  T *d_list = nullptr;
+  bool *d_hit = nullptr;
+  hipMalloc((void **)&d_count, sizeof(T) * 1);
+  hipMalloc((void **)&d_list, sizeof(T) * N);
+  hipMalloc((void **)&d_hit, sizeof(bool) * N);
+
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, LoadOtherOp_gpu     >(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, OperatorTOtherOp_gpu>(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, StoreOtherOp_gpu    >(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, AssignOtherOp_gpu   >(seg, count, d_count, list, d_list);
+
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, CASOtherOp_gpu                  >(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, CompareExchangeWeakOtherOp_gpu  >(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, CompareExchangeStrongOtherOp_gpu>(seg, count, d_count, list, d_list);
+
+  testAtomicRefCount_gpu<ExecPolicy, AtomicPolicy, T, PreIncCountOp_gpu  >(seg, count, d_count, list, d_list, hit, d_hit);
+  testAtomicRefCount_gpu<ExecPolicy, AtomicPolicy, T, PostIncCountOp_gpu >(seg, count, d_count, list, d_list, hit, d_hit);
+  testAtomicRefCount_gpu<ExecPolicy, AtomicPolicy, T, AddEqCountOp_gpu   >(seg, count, d_count, list, d_list, hit, d_hit);
+  testAtomicRefCount_gpu<ExecPolicy, AtomicPolicy, T, FetchAddCountOp_gpu>(seg, count, d_count, list, d_list, hit, d_hit);
+
+  testAtomicRefCount_gpu<ExecPolicy, AtomicPolicy, T, PreDecCountOp_gpu  >(seg, count, d_count, list, d_list, hit, d_hit);
+  testAtomicRefCount_gpu<ExecPolicy, AtomicPolicy, T, PostDecCountOp_gpu >(seg, count, d_count, list, d_list, hit, d_hit);
+  testAtomicRefCount_gpu<ExecPolicy, AtomicPolicy, T, SubEqCountOp_gpu   >(seg, count, d_count, list, d_list, hit, d_hit);
+  testAtomicRefCount_gpu<ExecPolicy, AtomicPolicy, T, FetchSubCountOp_gpu>(seg, count, d_count, list, d_list, hit, d_hit);
+
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, MaxEqOtherOp_gpu   >(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, FetchMaxOtherOp_gpu>(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, MinEqOtherOp_gpu   >(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, FetchMinOtherOp_gpu>(seg, count, d_count, list, d_list);
+
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, AndEqOtherOp_gpu   >(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, FetchAndOtherOp_gpu>(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, OrEqOtherOp_gpu    >(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, FetchOrOtherOp_gpu >(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, XorEqOtherOp_gpu   >(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, FetchXorOtherOp_gpu>(seg, count, d_count, list, d_list);
+
+  hipFree(d_hit);
+  hipFree(d_list);
+  hipFree(d_count);
+  delete[] hit;
+  delete[] list;
+  delete[] count;
+}
+
+
+
+template <typename ExecPolicy,
+          typename AtomicPolicy,
+          typename T,
+          RAJA::Index_type N>
+void testAtomicRefFloating_gpu()
+{
+  RAJA::RangeSegment seg(0, N);
+
+  // initialize an array
+  T *count  = new T[1];
+  T *list   = new T[N];
+  bool *hit = new bool[N];
+  T *d_count = nullptr;
+  T *d_list = nullptr;
+  bool *d_hit = nullptr;
+  hipMalloc((void **)&d_count, sizeof(T) * 1);
+  hipMalloc((void **)&d_list, sizeof(T) * N);
+  hipMalloc((void **)&d_hit, sizeof(bool) * N);
+
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, LoadOtherOp_gpu     >(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, OperatorTOtherOp_gpu>(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, StoreOtherOp_gpu    >(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, AssignOtherOp_gpu   >(seg, count, d_count, list, d_list);
+
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, CASOtherOp_gpu                  >(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, CompareExchangeWeakOtherOp_gpu  >(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, CompareExchangeStrongOtherOp_gpu>(seg, count, d_count, list, d_list);
+
+  testAtomicRefCount_gpu<ExecPolicy, AtomicPolicy, T, PreIncCountOp_gpu  >(seg, count, d_count, list, d_list, hit, d_hit);
+  testAtomicRefCount_gpu<ExecPolicy, AtomicPolicy, T, PostIncCountOp_gpu >(seg, count, d_count, list, d_list, hit, d_hit);
+  testAtomicRefCount_gpu<ExecPolicy, AtomicPolicy, T, AddEqCountOp_gpu   >(seg, count, d_count, list, d_list, hit, d_hit);
+  testAtomicRefCount_gpu<ExecPolicy, AtomicPolicy, T, FetchAddCountOp_gpu>(seg, count, d_count, list, d_list, hit, d_hit);
+
+  testAtomicRefCount_gpu<ExecPolicy, AtomicPolicy, T, PreDecCountOp_gpu  >(seg, count, d_count, list, d_list, hit, d_hit);
+  testAtomicRefCount_gpu<ExecPolicy, AtomicPolicy, T, PostDecCountOp_gpu >(seg, count, d_count, list, d_list, hit, d_hit);
+  testAtomicRefCount_gpu<ExecPolicy, AtomicPolicy, T, SubEqCountOp_gpu   >(seg, count, d_count, list, d_list, hit, d_hit);
+  testAtomicRefCount_gpu<ExecPolicy, AtomicPolicy, T, FetchSubCountOp_gpu>(seg, count, d_count, list, d_list, hit, d_hit);
+
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, MaxEqOtherOp_gpu   >(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, FetchMaxOtherOp_gpu>(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, MinEqOtherOp_gpu   >(seg, count, d_count, list, d_list);
+  testAtomicRefOther_gpu<ExecPolicy, AtomicPolicy, T, FetchMinOtherOp_gpu>(seg, count, d_count, list, d_list);
+
+  hipFree(d_hit);
+  hipFree(d_list);
+  hipFree(d_count);
+  delete[] hit;
+  delete[] list;
+  delete[] count;
+}
+
+template <typename ExecPolicy, typename AtomicPolicy>
+void testAtomicRefPol_gpu()
+{
+  testAtomicRefIntegral_gpu<ExecPolicy, AtomicPolicy, int, 10000>();
+  testAtomicRefIntegral_gpu<ExecPolicy, AtomicPolicy, unsigned, 10000>();
+  testAtomicRefIntegral_gpu<ExecPolicy, AtomicPolicy, long long, 10000>();
+  testAtomicRefIntegral_gpu<ExecPolicy, AtomicPolicy, unsigned long long, 10000>();
+
+  testAtomicRefFloating_gpu<ExecPolicy, AtomicPolicy, float, 10000>();
+  testAtomicRefFloating_gpu<ExecPolicy, AtomicPolicy, double, 10000>();
+}
+
+template <typename ExecPolicy,
+          typename AtomicPolicy,
+          typename T,
+          RAJA::Index_type N>
+void testAtomicViewBasic_gpu()
+{
+  RAJA::RangeSegment seg(0, N);
+  RAJA::RangeSegment seg_half(0, N / 2);
+
+// initialize an array
+  T *source = new T[N];
+  T *dest = new T[N / 2];
+  T *d_source = nullptr;
+  T *d_dest = nullptr;
+  hipMalloc((void **)&d_source, sizeof(T) * N);
+  hipMalloc((void **)&d_dest, sizeof(T) * N / 2);
+
+  RAJA::forall<RAJA::seq_exec>(seg,
+                               [=](RAJA::Index_type i) { source[i] = (T)1; });
+
+  hipMemcpy(d_source, source, N*sizeof(T), hipMemcpyHostToDevice);
+
+  // use atomic add to reduce the array
+  RAJA::View<T, RAJA::Layout<1>> vec_view(d_source, N);
+
+  RAJA::View<T, RAJA::Layout<1>> sum_view(d_dest, N);
+  auto sum_atomic_view = RAJA::make_atomic_view<AtomicPolicy>(sum_view);
+
+  // Zero out dest using atomic view
+  RAJA::forall<ExecPolicy>(seg_half, [=] RAJA_HOST_DEVICE (RAJA::Index_type i) {
+    sum_atomic_view(i) = (T)0;
+  });
+
+  // Assign values to dest using atomic view
+  RAJA::forall<ExecPolicy>(seg, [=] RAJA_HOST_DEVICE(RAJA::Index_type i) {
+    sum_atomic_view(i / 2) += vec_view(i);
+  });
+
+  hipDeviceSynchronize();
+
+  hipMemcpy(dest, d_dest, (N / 2)*sizeof(T), hipMemcpyDeviceToHost);
+
+  for (RAJA::Index_type i = 0; i < N / 2; ++i) {
+    EXPECT_EQ((T)2, dest[i]);
+  }
+
+  hipFree(d_source);
+  hipFree(d_dest);
+  delete[] source;
+  delete[] dest;
+}
+
+
+template <typename ExecPolicy, typename AtomicPolicy>
+void testAtomicViewPol_gpu()
+{
+  testAtomicViewBasic_gpu<ExecPolicy, AtomicPolicy, int, 100000>();
+  testAtomicViewBasic_gpu<ExecPolicy, AtomicPolicy, unsigned, 100000>();
+  testAtomicViewBasic_gpu<ExecPolicy, AtomicPolicy, long long, 100000>();
+  testAtomicViewBasic_gpu<ExecPolicy, AtomicPolicy, unsigned long long, 100000>();
+  testAtomicViewBasic_gpu<ExecPolicy, AtomicPolicy, float, 100000>();
+  testAtomicViewBasic_gpu<ExecPolicy, AtomicPolicy, double, 100000>();
+}
+
+
+template <typename ExecPolicy,
+          typename AtomicPolicy,
+          typename T,
+          RAJA::Index_type N>
+void testAtomicLogical_gpu()
+{
+  RAJA::RangeSegment seg(0, N * 8);
+  RAJA::RangeSegment seg_bytes(0, N);
+
+// initialize an array
+  T *dest_and = new T[N];
+  T *dest_or = new T[N];
+  T *dest_xor = new T[N];
+
+  T *d_dest_and = nullptr;
+  T *d_dest_or = nullptr;
+  T *d_dest_xor = nullptr;
+  hipMalloc((void **)&d_dest_and, sizeof(T) * N);
+  hipMalloc((void **)&d_dest_or, sizeof(T) * N);
+  hipMalloc((void **)&d_dest_xor, sizeof(T) * N);
+
+  RAJA::forall<RAJA::seq_exec>(seg_bytes, [=](RAJA::Index_type i) {
+    dest_and[i] = (T)0;
+    dest_or[i] = (T)0;
+    dest_xor[i] = (T)0;
+  });
+
+  hipMemcpy(d_dest_and, dest_and, N*sizeof(T), hipMemcpyHostToDevice);
+  hipMemcpy(d_dest_or,  dest_or,  N*sizeof(T), hipMemcpyHostToDevice);
+  hipMemcpy(d_dest_xor, dest_xor, N*sizeof(T), hipMemcpyHostToDevice);
+
+  RAJA::forall<ExecPolicy>(seg, [=] RAJA_HOST_DEVICE(RAJA::Index_type i) {
+    RAJA::Index_type offset = i / 8;
+    RAJA::Index_type bit = i % 8;
+    RAJA::atomic::atomicAnd<AtomicPolicy>(d_dest_and + offset,
+                                          (T)(0xFF ^ (1 << bit)));
+    RAJA::atomic::atomicOr<AtomicPolicy>(d_dest_or + offset, (T)(1 << bit));
+    RAJA::atomic::atomicXor<AtomicPolicy>(d_dest_xor + offset, (T)(1 << bit));
+  });
+
+  hipDeviceSynchronize();
+
+  hipMemcpy(dest_and, d_dest_and, N*sizeof(T), hipMemcpyDeviceToHost);
+  hipMemcpy(dest_or,  d_dest_or,  N*sizeof(T), hipMemcpyDeviceToHost);
+  hipMemcpy(dest_xor, d_dest_xor, N*sizeof(T), hipMemcpyDeviceToHost);
+
+  for (RAJA::Index_type i = 0; i < N; ++i) {
+    EXPECT_EQ((T)0x00, dest_and[i]);
+    EXPECT_EQ((T)0xFF, dest_or[i]);
+    EXPECT_EQ((T)0xFF, dest_xor[i]);
+  }
+
+  hipFree(d_dest_and);
+  hipFree(d_dest_or);
+  hipFree(d_dest_xor);
+  delete[] dest_and;
+  delete[] dest_or;
+  delete[] dest_xor;
+}
+
+
+template <typename ExecPolicy, typename AtomicPolicy>
+void testAtomicLogicalPol_gpu()
+{
+  testAtomicLogical_gpu<ExecPolicy, AtomicPolicy, int, 100000>();
+  testAtomicLogical_gpu<ExecPolicy, AtomicPolicy, unsigned, 100000>();
+  testAtomicLogical_gpu<ExecPolicy, AtomicPolicy, long long, 100000>();
+  testAtomicLogical_gpu<ExecPolicy, AtomicPolicy, unsigned long long, 100000>();
+}
+
+#endif //defined(RAJA_ENABLE_HIP)
+
 
 #if defined(RAJA_ENABLE_OPENMP)
 
@@ -911,6 +1731,33 @@ CUDA_TEST(Atomic, basic_CUDA_Logical)
   testAtomicLogicalPol<RAJA::cuda_exec<256>, RAJA::atomic::cuda_atomic>();
 }
 
+#endif
+
+#if defined(RAJA_ENABLE_HIP)
+
+HIP_TEST(Atomic, basic_HIP_AtomicFunction)
+{
+  testAtomicFunctionPol_gpu<RAJA::hip_exec<256>, RAJA::atomic::auto_atomic>();
+  testAtomicFunctionPol_gpu<RAJA::hip_exec<256>, RAJA::atomic::hip_atomic>();
+}
+
+HIP_TEST(Atomic, basic_HIP_AtomicRef)
+{
+  testAtomicRefPol_gpu<RAJA::hip_exec<256>, RAJA::atomic::auto_atomic>();
+  testAtomicRefPol_gpu<RAJA::hip_exec<256>, RAJA::atomic::hip_atomic>();
+}
+
+HIP_TEST(Atomic, basic_HIP_AtomicView)
+{
+  testAtomicViewPol_gpu<RAJA::hip_exec<256>, RAJA::atomic::auto_atomic>();
+  testAtomicViewPol_gpu<RAJA::hip_exec<256>, RAJA::atomic::hip_atomic>();
+}
+
+HIP_TEST(Atomic, basic_HIP_Logical)
+{
+  testAtomicLogicalPol_gpu<RAJA::hip_exec<256>, RAJA::atomic::auto_atomic>();
+  testAtomicLogicalPol_gpu<RAJA::hip_exec<256>, RAJA::atomic::hip_atomic>();
+}
 
 #endif
 
@@ -934,7 +1781,6 @@ TEST(Atomic, basic_seq_AtomicView)
   testAtomicViewPol<RAJA::seq_exec, RAJA::atomic::seq_atomic>();
   testAtomicViewPol<RAJA::seq_exec, RAJA::atomic::builtin_atomic>();
 }
-
 
 TEST(Atomic, basic_seq_Logical)
 {

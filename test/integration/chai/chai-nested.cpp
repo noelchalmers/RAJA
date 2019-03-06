@@ -12,6 +12,9 @@
 // For details about use and distribution, please read RAJA/LICENSE.
 //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+//////////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+//////////////////////////////////////////////////////////////////////////////
 
 ///
 /// Source file containing tests for CHAI in RAJA nested loops.
@@ -37,6 +40,8 @@ using namespace std;
 /*
  * Simple tests using forallN and View
  */
+#if defined(RAJA_ENABLE_CUDA)
+
 CUDA_TEST(Chai, NestedSimpleOld)
 {
   typedef RAJA::NestedPolicy<RAJA::ExecList<RAJA::seq_exec, RAJA::seq_exec>>
@@ -208,6 +213,183 @@ CUDA_TEST(Chai, NestedView2)
                           ASSERT_FLOAT_EQ(v2(i, j), v1(i, j) * 2.0f);
                         });
 }
+#endif //defined(RAJA_ENABLE_CUDA)
+
+
+#if defined(RAJA_ENABLE_HIP)
+
+HIP_TEST(Chai, NestedSimpleOld)
+{
+  typedef RAJA::NestedPolicy<RAJA::ExecList<RAJA::seq_exec, RAJA::seq_exec>>
+      POLICY;
+  typedef RAJA::NestedPolicy<
+      RAJA::ExecList<RAJA::seq_exec, RAJA::hip_thread_y_exec>>
+      POLICY_GPU;
+
+  const int X = 16;
+  const int Y = 16;
+
+  chai::ManagedArray<float> v1(X * Y);
+  chai::ManagedArray<float> v2(X * Y);
+
+  RAJA::forallN<POLICY>(RangeSegment(0, Y),
+                        RangeSegment(0, X),
+                        [=](int i, int j) {
+                          int index = j * X + i;
+                          v1[index] = index;
+                        });
+
+  RAJA::forallN<POLICY_GPU>(RangeSegment(0, Y),
+                            RangeSegment(0, X),
+                            [=] __device__(int i, int j) {
+                              int index = j * X + i;
+                              v2[index] = v1[index] * 2.0f;
+                            });
+  hipDeviceSynchronize();
+
+  RAJA::forallN<POLICY>(RangeSegment(0, Y),
+                        RangeSegment(0, X),
+                        [=](int i, int j) {
+                          int index = j * X + i;
+                          ASSERT_FLOAT_EQ(v1[index], index * 1.0f);
+                          ASSERT_FLOAT_EQ(v2[index], index * 2.0f);
+                        });
+}
+
+
+/*
+ * Simple tests using nested::forall and View
+ */
+HIP_TEST(Chai, NestedSimple)
+{
+  typedef RAJA::KernelPolicy<
+      RAJA::statement::
+          For<0, RAJA::seq_exec, RAJA::statement::For<1, RAJA::seq_exec>>>
+      POLICY;
+  typedef RAJA::KernelPolicy<RAJA::statement::For<
+      0,
+      RAJA::seq_exec,
+      RAJA::statement::HipKernel<
+          RAJA::statement::For<1, RAJA::hip_threadblock_exec<32>>>>>
+      POLICY_GPU;
+
+  const int X = 16;
+  const int Y = 16;
+
+  chai::ManagedArray<float> v1(X * Y);
+  chai::ManagedArray<float> v2(X * Y);
+
+  RAJA::kernel<POLICY>(
+
+      RAJA::make_tuple(RAJA::RangeSegment(0, Y), RAJA::RangeSegment(0, X)),
+
+      [=](int i, int j) {
+        int index = j * X + i;
+        v1[index] = index;
+      });
+
+  RAJA::kernel<POLICY_GPU>(
+
+      RAJA::make_tuple(RangeSegment(0, Y), RangeSegment(0, X)),
+
+      [=] __host__ __device__(int i, int j) {
+        int index = j * X + i;
+        v2[index] = v1[index] * 2.0f;
+      });
+
+  hipDeviceSynchronize();
+
+  RAJA::kernel<POLICY>(
+
+      RAJA::make_tuple(RAJA::RangeSegment(0, Y), RAJA::RangeSegment(0, X)),
+
+      [=](int i, int j) {
+        int index = j * X + i;
+        ASSERT_FLOAT_EQ(v1[index], index * 1.0f);
+        ASSERT_FLOAT_EQ(v2[index], index * 2.0f);
+      });
+}
+
+HIP_TEST(Chai, NestedView)
+{
+  typedef RAJA::NestedPolicy<RAJA::ExecList<RAJA::seq_exec, RAJA::seq_exec>>
+      POLICY;
+  typedef RAJA::NestedPolicy<
+      RAJA::ExecList<RAJA::seq_exec, RAJA::hip_thread_y_exec>>
+      POLICY_GPU;
+
+  const int X = 16;
+  const int Y = 16;
+
+  chai::ManagedArray<float> v1_array(X * Y);
+  chai::ManagedArray<float> v2_array(X * Y);
+
+  typedef RAJA::ManagedArrayView<float, RAJA::Layout<2>> view;
+
+  view v1(v1_array, X, Y);
+  view v2(v2_array, X, Y);
+
+  RAJA::forallN<POLICY>(RangeSegment(0, Y),
+                        RangeSegment(0, X),
+                        [=](int i, int j) { v1(i, j) = (i + (j * X)) * 1.0f; });
+
+  RAJA::forallN<POLICY_GPU>(RangeSegment(0, Y),
+                            RangeSegment(0, X),
+                            [=] __device__(int i, int j) {
+                              v2(i, j) = v1(i, j) * 2.0f;
+                            });
+
+  RAJA::forallN<POLICY>(RangeSegment(0, Y),
+                        RangeSegment(0, X),
+                        [=](int i, int j) {
+                          ASSERT_FLOAT_EQ(v2(i, j), v1(i, j) * 2.0f);
+                        });
+}
+
+HIP_TEST(Chai, NestedView2)
+{
+  typedef RAJA::NestedPolicy<RAJA::ExecList<RAJA::seq_exec, RAJA::seq_exec>>
+      POLICY;
+
+#if defined(RAJA_ENABLE_OPENMP)
+  typedef RAJA::NestedPolicy<
+      RAJA::ExecList<RAJA::omp_for_nowait_exec, RAJA::hip_thread_x_exec>,
+      RAJA::OMP_Parallel<>>
+      POLICY_GPU;
+#else
+  typedef RAJA::NestedPolicy<
+      RAJA::ExecList<RAJA::seq_exec, RAJA::hip_thread_x_exec>>
+      POLICY_GPU;
+#endif
+
+  const int X = 16;
+  const int Y = 16;
+
+  chai::ManagedArray<float> v1_array(X * Y);
+  chai::ManagedArray<float> v2_array(X * Y);
+
+  typedef RAJA::ManagedArrayView<float, RAJA::Layout<2>> view;
+
+  view v1(v1_array, X, Y);
+  view v2(v2_array, X, Y);
+
+  RAJA::forallN<POLICY>(RangeSegment(0, Y),
+                        RangeSegment(0, X),
+                        [=](int i, int j) { v1(i, j) = (i + (j * X)) * 1.0f; });
+
+  RAJA::forallN<POLICY_GPU>(RangeSegment(0, Y),
+                            RangeSegment(0, X),
+                            [=] __device__(int i, int j) {
+                              v2(i, j) = v1(i, j) * 2.0f;
+                            });
+
+  RAJA::forallN<POLICY>(RangeSegment(0, Y),
+                        RangeSegment(0, X),
+                        [=](int i, int j) {
+                          ASSERT_FLOAT_EQ(v2(i, j), v1(i, j) * 2.0f);
+                        });
+}
+#endif //defined(RAJA_ENABLE_HIP)
 
 ///////////////////////////////////////////////////////////////////////////
 //
@@ -254,12 +436,21 @@ void runLTimesTest(std::string const& policy,
   // 0.0);
   chai::ManagedArray<double> phi_data(num_moments * num_groups * num_zones);
 
-  // setup CUDA Reduction variables to be exercised
+
+  // setup GPU Reduction variables to be exercised
+#if defined(RAJA_ENABLE_CUDA)
   ReduceSum<cuda_reduce, double> pdsum(0.0);
   ReduceMin<cuda_reduce, double> pdmin(DBL_MAX);
   ReduceMax<cuda_reduce, double> pdmax(-DBL_MAX);
   ReduceMinLoc<cuda_reduce, double> pdminloc(DBL_MAX, -1);
   ReduceMaxLoc<cuda_reduce, double> pdmaxloc(-DBL_MAX, -1);
+#elif defined(RAJA_ENABLE_HIP)
+  ReduceSum<hip_reduce, double> pdsum(0.0);
+  ReduceMin<hip_reduce, double> pdmin(DBL_MAX);
+  ReduceMax<hip_reduce, double> pdmax(-DBL_MAX);
+  ReduceMinLoc<hip_reduce, double> pdminloc(DBL_MAX, -1);
+  ReduceMaxLoc<hip_reduce, double> pdmaxloc(-DBL_MAX, -1);
+#endif
 
 
   // data setup using RAJA to ensure that chai is activated
@@ -314,7 +505,11 @@ void runLTimesTest(std::string const& policy,
         pdmaxloc.maxloc(val, index);
       });
 
+#if defined(RAJA_ENABLE_CUDA)
   cudaDeviceSynchronize();
+#elif defined(RAJA_ENABLE_HIP)
+  hipDeviceSynchronize();
+#endif
 
   // Make sure data is copied to host for checking results.
   chai::ArrayManager* rm = chai::ArrayManager::getInstance();
@@ -359,11 +554,19 @@ void runLTimesTest(std::string const& policy,
 // Use thread-block mappings
 struct PolLTimesA_GPU {
   // Loops: Moments, Directions, Groups, Zones
+#if defined(RAJA_ENABLE_CUDA)
   typedef NestedPolicy<ExecList<seq_exec,
                                 seq_exec,
                                 cuda_threadblock_x_exec<32>,
                                 cuda_threadblock_y_exec<32>>>
       EXEC;
+#elif defined(RAJA_ENABLE_HIP)
+  typedef NestedPolicy<ExecList<seq_exec,
+                                seq_exec,
+                                hip_threadblock_x_exec<32>,
+                                hip_threadblock_y_exec<32>>>
+      EXEC;
+#endif
 
   // psi[direction, group, zone]
   typedef RAJA::
@@ -388,10 +591,17 @@ struct PolLTimesA_GPU {
 // Use thread and block mappings
 struct PolLTimesB_GPU {
   // Loops: Moments, Directions, Groups, Zones
+#if defined(RAJA_ENABLE_CUDA)
   typedef NestedPolicy<
       ExecList<seq_exec, seq_exec, cuda_thread_z_exec, cuda_block_y_exec>,
       Permute<PERM_IJKL>>
       EXEC;
+#elif defined(RAJA_ENABLE_HIP)
+  typedef NestedPolicy<
+      ExecList<seq_exec, seq_exec, hip_thread_z_exec, hip_block_y_exec>,
+      Permute<PERM_IJKL>>
+      EXEC;
+#endif
 
   // psi[direction, group, zone]
   typedef RAJA::
@@ -416,6 +626,8 @@ struct PolLTimesB_GPU {
 // Combine OMP Parallel, omp nowait, and cuda thread-block launch
 struct PolLTimesC_GPU {
   // Loops: Moments, Directions, Groups, Zones
+#if defined(RAJA_ENABLE_CUDA)
+
 #if defined(RAJA_ENABLE_OPENMP)
   typedef NestedPolicy<ExecList<seq_exec,
                                 seq_exec,
@@ -427,6 +639,23 @@ struct PolLTimesC_GPU {
   typedef NestedPolicy<
       ExecList<seq_exec, seq_exec, seq_exec, cuda_threadblock_y_exec<32>>>
       EXEC;
+#endif
+
+#elif defined(RAJA_ENABLE_HIP)
+
+#if defined(RAJA_ENABLE_OPENMP)
+  typedef NestedPolicy<ExecList<seq_exec,
+                                seq_exec,
+                                omp_for_nowait_exec,
+                                hip_threadblock_y_exec<32>>,
+                       OMP_Parallel<>>
+      EXEC;
+#else
+  typedef NestedPolicy<
+      ExecList<seq_exec, seq_exec, seq_exec, hip_threadblock_y_exec<32>>>
+      EXEC;
+#endif
+
 #endif
 
   // psi[direction, group, zone]

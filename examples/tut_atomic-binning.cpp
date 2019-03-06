@@ -12,6 +12,9 @@
 // For details about use and distribution, please read RAJA/LICENSE.
 //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+//////////////////////////////////////////////////////////////////////////////
+// Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
+//////////////////////////////////////////////////////////////////////////////
 
 #include <cstdlib>
 #include <iostream>
@@ -43,6 +46,10 @@
 const int CUDA_BLOCK_SIZE = 256;
 #endif
 
+#if defined(RAJA_ENABLE_HIP)
+const int HIP_BLOCK_SIZE = 256;
+#endif
+
 template <typename T>
 void printBins(T* bins, int M);
 
@@ -60,9 +67,9 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
   int* bins = memoryManager::allocate<int>(M);
 
   RAJA::forall<RAJA::seq_exec>(array_range, [=](int i) {
-                               
+
       array[i] = rand() % M;
-      
+
   });
   //----------------------------------------------------------------------------//
 
@@ -73,7 +80,7 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
   using ATOMIC_POL1 = RAJA::atomic::seq_atomic;
 
   RAJA::forall<EXEC_POL1>(array_range, [=](int i) {
-                                                      
+
     RAJA::atomic::atomicAdd<ATOMIC_POL1>(&bins[array[i]], 1);
 
   });
@@ -91,9 +98,9 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
   using ATOMIC_POL2 = RAJA::atomic::omp_atomic;
 
   RAJA::forall<EXEC_POL2>(array_range, [=](int i) {
-                          
+
     RAJA::atomic::atomicAdd<ATOMIC_POL2>(&bins[array[i]], 1);
-                                           
+
   });
 
   printBins(bins, M);
@@ -107,9 +114,9 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
   using ATOMIC_POL3 = RAJA::atomic::auto_atomic;
 
   RAJA::forall<EXEC_POL2>(array_range, [=](int i) {
-  
+
     RAJA::atomic::atomicAdd<ATOMIC_POL3>(&bins[array[i]], 1);
-  
+
   });
 
   printBins(bins, M);
@@ -127,9 +134,9 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
   using ATOMIC_POL4 = RAJA::atomic::cuda_atomic;
 
   RAJA::forall<EXEC_POL4>(array_range, [=] RAJA_DEVICE(int i) {
-                          
+
     RAJA::atomic::atomicAdd<ATOMIC_POL4>(&bins[array[i]], 1);
-                                                 
+
   });
 
   printBins(bins, M);
@@ -148,7 +155,54 @@ int main(int RAJA_UNUSED_ARG(argc), char** RAJA_UNUSED_ARG(argv[]))
   });
 
   printBins(bins, M);
-  
+
+#endif
+//----------------------------------------------------------------------------//
+
+
+#if defined(RAJA_ENABLE_HIP)
+
+  std::cout << "\n\nRunning RAJA HIP binning" << std::endl;
+  std::memset(bins, 0, M * sizeof(int));
+
+  int* d_array = memoryManager::allocate_gpu<int>(N);
+  int* d_bins  = memoryManager::allocate_gpu<int>(M);
+  hipErrchk(hipMemcpy( d_array, array, N * sizeof(int), hipMemcpyHostToDevice ));
+  hipErrchk(hipMemcpy( d_bins, bins, M * sizeof(int), hipMemcpyHostToDevice ));
+
+  using EXEC_POL4 = RAJA::hip_exec<HIP_BLOCK_SIZE>;
+  using ATOMIC_POL4 = RAJA::atomic::hip_atomic;
+
+  RAJA::forall<EXEC_POL4>(array_range, [=] RAJA_DEVICE(int i) {
+
+    RAJA::atomic::atomicAdd<ATOMIC_POL4>(&d_bins[d_array[i]], 1);
+
+  });
+
+  hipErrchk(hipMemcpy( bins, d_bins, M * sizeof(int), hipMemcpyDeviceToHost ));
+
+  printBins(bins, M);
+
+//----------------------------------------------------------------------------//
+
+  std::cout << "\n\nRunning RAJA HIP binning with auto atomic" << std::endl;
+  std::memset(bins, 0, M * sizeof(int));
+  hipErrchk(hipMemcpy( d_bins, bins, M * sizeof(int), hipMemcpyHostToDevice ));
+
+  using ATOMIC_POL5 = RAJA::atomic::auto_atomic;
+
+  RAJA::forall<EXEC_POL4>(array_range, [=] RAJA_DEVICE(int i) {
+
+    RAJA::atomic::atomicAdd<ATOMIC_POL5>(&d_bins[d_array[i]], 1);
+
+  });
+
+  hipErrchk(hipMemcpy( bins, d_bins, M * sizeof(int), hipMemcpyDeviceToHost ));
+
+  printBins(bins, M);
+
+  memoryManager::deallocate_gpu(d_array);
+  memoryManager::deallocate_gpu(d_bins);
 #endif
   //----------------------------------------------------------------------------//
 
