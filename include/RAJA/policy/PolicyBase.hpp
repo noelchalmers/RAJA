@@ -22,9 +22,6 @@
 // For details about use and distribution, please read RAJA/LICENSE.
 //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
-//////////////////////////////////////////////////////////////////////////////
-// Copyright (c) 2018,2019 Advanced Micro Devices, Inc.
-//////////////////////////////////////////////////////////////////////////////
 
 #ifndef RAJA_POLICYBASE_HPP
 #define RAJA_POLICYBASE_HPP
